@@ -2,7 +2,7 @@ import sqlite3
 from typing import List, Optional, Dict
 from datetime import datetime
 
-DB_PATH = "queue.db"  # Можно изменить путь, если нужно
+DB_PATH = "queue.db"
 
 class QueueDB:
     def __init__(self):
@@ -12,12 +12,25 @@ class QueueDB:
         self._setup_tables()
 
     def _setup_tables(self):
+        # Таблица для ВСЕХ пользователей
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            registered_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL
+        )
+        """)
+        
         # Таблица для очереди
         self.cursor.execute("""
         CREATE TABLE IF NOT EXISTS queue (
             user_id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
-            joined_at TEXT NOT NULL
+            joined_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
         """)
         
@@ -37,6 +50,40 @@ class QueueDB:
             self.set_office_status("closed")
         
         self.conn.commit()
+
+    # ---------------- Пользователи ----------------
+
+    def add_or_update_user(self, user_id: int, username: str = None, 
+                          first_name: str = None, last_name: str = None):
+        """Добавить или обновить пользователя"""
+        now = datetime.now().isoformat()
+        
+        self.cursor.execute("""
+        INSERT OR IGNORE INTO users (user_id, username, first_name, last_name, registered_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, username, first_name, last_name, now, now))
+        
+        self.cursor.execute("""
+        UPDATE users SET 
+            username = COALESCE(?, username),
+            first_name = COALESCE(?, first_name),
+            last_name = COALESCE(?, last_name),
+            last_seen_at = ?
+        WHERE user_id = ?
+        """, (username, first_name, last_name, now, user_id))
+        
+        self.conn.commit()
+
+    def get_all_users(self) -> List[Dict]:
+        """Получить всех пользователей бота"""
+        self.cursor.execute("SELECT user_id FROM users")
+        rows = self.cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    def get_all_user_ids(self) -> List[int]:
+        """Получить только ID всех пользователей"""
+        self.cursor.execute("SELECT user_id FROM users")
+        return [row[0] for row in self.cursor.fetchall()]
 
     # ---------------- Очередь ----------------
 
