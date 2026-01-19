@@ -30,7 +30,7 @@ def get_admin_keyboard():
         [InlineKeyboardButton(text="🗑️ Очистить очередь", callback_data="admin_clear")],
         [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
         [InlineKeyboardButton(text="👥 Текущая очередь", callback_data="admin_view")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_back")]
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_panel")]
     ]
     
     return InlineKeyboardMarkup(inline_keyboard=[buttons[i:i+2] for i in range(0, len(buttons), 2)])
