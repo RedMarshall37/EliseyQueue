@@ -23,7 +23,6 @@ def get_admin_keyboard():
         [KeyboardButton(text="✅ Открыть кабинет"), KeyboardButton(text="✅ Открыть кабинет")],
         [KeyboardButton(text="❌ Закрыть кабинет"), KeyboardButton(text="❌ Закрыть кабинет")],
         [KeyboardButton(text="⏸️ Приостановить"), KeyboardButton(text="⏸️ Приостановить")],
-        [KeyboardButton(text="⏸️ Приостановить"), KeyboardButton(text="⏸️ Приостановить")],
         [KeyboardButton(text="🗑️ Очистить очередь"), KeyboardButton(text="🗑️ Очистить очередь")],
         [KeyboardButton(text="◀️ Назад в меню"), KeyboardButton(text="◀️ Назад в меню")]
     ]
@@ -33,3 +32,4 @@ def get_admin_keyboard():
         resize_keyboard=True,
         input_field_placeholder="Админ-команды"
     )
+
