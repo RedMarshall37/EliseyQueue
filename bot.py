@@ -200,9 +200,7 @@ async def accept_user(message: Message):
         try:
             await bot.send_message(
                 found_user['user_id'],
-                f"❌ <b>Вы были удалены из очереди администратором</b>\n\n"
-                f"Причина: пропущен в очереди.\n"
-                f"Попробуйте встать в очередь позже.",
+                f"❌ <b>Ты был удален из очереди</b>",
                 parse_mode="HTML"
             )
         except:
@@ -210,8 +208,7 @@ async def accept_user(message: Message):
         
         # Отправляем сообщение об удалении
         response = await message.answer(
-            f"❌ <b>Пользователь удален из очереди:</b>\n\n"
-            f"👤 {user_name}",
+            f"❌ <b>Пользователь {user_name} удален из очереди. Старикам тут не место</b>\n\n",
             parse_mode="HTML"
         )
         
@@ -227,8 +224,7 @@ async def accept_user(message: Message):
     try:
         await bot.send_message(
             user_id,
-            f"✅ <b>Елисей готов вас принять!</b>\n\n"
-            f"Подойдите к кабинету.\n"
+            f"✅ <b>Елисей готов вас принять</b>\n\n"
             f"Ваше имя в очереди: <b>{user_name}</b>",
             parse_mode="HTML"
         )
@@ -240,9 +236,7 @@ async def accept_user(message: Message):
     
     # Отправляем сообщение о принятии
     response = await message.answer(
-        f"✅ <b>Пользователь принят и удален из очереди!</b>\n\n"
-        f"👤 {user_name}\n"
-        f"<i>Пользователь получил уведомление о приеме.</i>",
+        f"✅ <b>Пользователь {user_name} принят и удален из очереди!</b>\n\n",
         parse_mode="HTML"
     )
     
@@ -264,7 +258,7 @@ async def reject_user(message: Message):
     # Находим пользователя в очереди
     queue = db.get_queue()
     if not queue:
-        await message.answer("📭 <b>Очередь пуста!</b>", parse_mode="HTML")
+        await message.answer("📭 <b>Очередь пуста</b>", parse_mode="HTML")
         return
     
     # Ищем пользователя по имени
@@ -293,20 +287,15 @@ async def reject_user(message: Message):
     try:
         await bot.send_message(
             user_id,
-            f"❌ <b>Елисей пока не готов вас принять</b>\n\n"
-            f"Попробуйте встать в очередь позже.\n"
-            f"Ваше имя в очереди: <b>{user_name}</b>\n"
-            f"Ваша позиция была: {user_position}",
+            f"❌ <b>Елисей пока не готов тебя принять</b>\n\n"
+            f"Попробуй позже",
             parse_mode="HTML"
         )
     except Exception as e:
         print(f"Не удалось уведомить пользователя {user_id}: {e}")
     
     await message.answer(
-        f"❌ <b>Пользователь отклонен и удален из очереди:</b>\n\n"
-        f"👤 {user_name}\n"
-        f"📊 Позиция была: {user_position}\n\n"
-        f"<i>Пользователь получил уведомление.</i>",
+        f"❌ <b>Пользователь {user_name} отклонен и удален из очереди:</b>\n\n",
         parse_mode="HTML"
     )
     
@@ -316,10 +305,8 @@ async def reject_user(message: Message):
         next_user = queue[0]
         await asyncio.sleep(1)
         await message.answer(
-            f"🎯 <b>Следующий в очереди:</b>\n\n"
-            f"👤 <b>{next_user['name']}</b>\n"
-            f"⏰ В очереди с: {next_user['joined_at'][11:16]}\n\n"
-            f"<i>Для управления нажмите '👤 Управление очередью'</i>",
+            f"<b>Следующий в очереди: {next_user['name']}</b>\n\n"
+            f"В очереди с: {next_user['joined_at'][11:16]}\n\n",
             parse_mode="HTML"
         )
 
@@ -371,7 +358,6 @@ async def queue_statistics(message: Message):
     await message.answer(text, parse_mode="HTML")
 
 
-
 # ========== УВЕДОМЛЕНИЕ АДМИНУ О НОВОМ ПОЛЬЗОВАТЕЛЕ ==========
 @dp.message(F.text == "📝 Встать в очередь")
 async def join_queue_start(message: Message):
@@ -386,7 +372,7 @@ async def join_queue_start(message: Message):
 
     if status["status"] == "closed":
         await message.answer(
-            f"❌ <b>Кабинет закрыт!</b>\n{status.get('message', '')}",
+            f"❌ <b>Кабинет закрыт, отъебитес</b>\n{status.get('message', '')}",
             parse_mode="HTML"
         )
         return
@@ -394,7 +380,7 @@ async def join_queue_start(message: Message):
     position = db.get_user_position(message.from_user.id)
     if position:
         await message.answer(
-            f"⚠️ <b>Вы уже в очереди!</b> Ваш номер: <b>{position}</b>",
+            f"⚠️ <b>Ты уже в очереди.</b> Твой номер: <b>{position}</b>",
             parse_mode="HTML"
         )
         return
@@ -415,16 +401,15 @@ async def join_queue_start(message: Message):
     result = db.add_to_queue(message.from_user.id, user_name)
 
     if result == -1:
-        await message.answer("⚠️ <b>Вы уже в очереди!</b>", parse_mode="HTML")
+        await message.answer("⚠️ <b>Ты уже в очереди</b>", parse_mode="HTML")
         return
 
     position = db.get_user_position(message.from_user.id)
 
     if position:
         await message.answer(
-            f"✅ <b>Вы добавлены в очередь!</b>\n\n"
-            f"• Ваш номер: <b>{position}</b>\n"
-            f"• Имя в очереди: <b>{user_name}</b>\n"
+            f"✅ <b>Ты ̶п̶р̶е̶д̶а̶л̶ х̶р̶и̶с̶т̶а добавлен в очередь</b>\n\n"
+            f"• Твой номер: <b>{position}</b>\n"
             f"• Людей перед вами: <b>{position - 1}</b>",
             parse_mode="HTML"
         )
@@ -446,9 +431,8 @@ async def join_queue_start(message: Message):
                 
                 await bot.send_message(
                     config.config.ADMIN_ID,
-                    f"👤 <b>Новый пользователь в очереди!</b>\n\n"
-                    f"• Имя: <b>{user_name}</b>\n"
-                    f"• Позиция в очереди: <b>{position}</b>\n"
+                    f"👤 <b>Новый пользователь {user_name} в очереди, милорд!</b>\n\n"
+                    f"• Его позиция: <b>{position}</b>\n"
                     f"• Всего в очереди: <b>{total_in_queue}</b>\n\n"
                     f"<b>Текущая очередь:</b>\n{queue_info}\n",
                     parse_mode="HTML"
@@ -552,7 +536,7 @@ async def process_user_id(message: Message, state: FSMContext):
             f"👤 <b>Найден пользователь:</b>\n"
             f"ID: {user_id}\n"
             f"Текущее имя: <b>{user_info['name']}</b>\n\n"
-            f"✏️ <b>Введите новое имя:</b>",
+            f"✏️ <b>Введи новое имя:</b>",
             parse_mode="HTML"
         )
         await state.set_state(ChangeNameStates.waiting_for_new_name)
@@ -577,7 +561,7 @@ async def process_user_id(message: Message, state: FSMContext):
                 f"👤 <b>Найден пользователь:</b>\n"
                 f"ID: {user['user_id']}\n"
                 f"Текущее имя: <b>{user['name']}</b>\n\n"
-                f"✏️ <b>Введите новое имя:</b>",
+                f"✏️ <b>Введи новое имя:</b>",
                 parse_mode="HTML"
             )
             await state.set_state(ChangeNameStates.waiting_for_new_name)
@@ -588,7 +572,7 @@ async def process_user_id(message: Message, state: FSMContext):
                 position = db.get_user_position(user['user_id'])
                 text += f"{i}. <b>{user['name']}</b> (ID: {user['user_id']}, позиция: {position})\n"
             
-            text += "\n<b>Введите ID нужного пользователя:</b>"
+            text += "\n<b>Введи ID нужного пользователя:</b>"
             
             await state.update_data(search_results=users)
             await message.answer(text, parse_mode="HTML")
@@ -602,7 +586,7 @@ async def process_new_name(message: Message, state: FSMContext):
     if len(new_name) < 2:
         await message.answer(
             "❌ <b>Имя должно быть не короче 2 символов.</b>\n"
-            "Попробуйте еще раз:",
+            "Попробуй еще раз:",
             parse_mode="HTML"
         )
         return
@@ -623,8 +607,7 @@ async def process_new_name(message: Message, state: FSMContext):
             f"✅ <b>Имя успешно изменено!</b>\n\n"
             f"👤 Пользователь ID: {user_id}\n"
             f"📝 Было: <b>{current_name}</b>\n"
-            f"📝 Стало: <b>{new_name}</b>\n"
-            f"🔢 Позиция в очереди: <b>{position}</b>",
+            f"📝 Стало: <b>{new_name}</b>\n",
             parse_mode="HTML"
         )
         
@@ -633,10 +616,9 @@ async def process_new_name(message: Message, state: FSMContext):
             try:
                 await bot.send_message(
                     user_id,
-                    f"✏️ <b>Администратор изменил ваше имя в очереди:</b>\n\n"
+                    f"✏️ <b>Администратор изменил твое имя:</b>\n\n"
                     f"📝 Было: <b>{current_name}</b>\n"
-                    f"📝 Стало: <b>{new_name}</b>\n"
-                    f"🔢 Ваша позиция: <b>{position}</b>",
+                    f"📝 Теперь тебя зовут: <b>{new_name}</b>\n",
                     parse_mode="HTML"
                 )
             except:
@@ -703,7 +685,7 @@ async def join_queue_start(message: Message, state: FSMContext):
 
     if status["status"] == "closed":
         await message.answer(
-            f"❌ <b>Кабинет закрыт!</b>\n{status.get('message', '')}",
+            f"❌ <b>Кабинет закрыт, отъебитес</b>\n{status.get('message', '')}",
             parse_mode="HTML"
         )
         return
@@ -711,7 +693,7 @@ async def join_queue_start(message: Message, state: FSMContext):
     position = db.get_user_position(message.from_user.id)
     if position:
         await message.answer(
-            f"⚠️ <b>Вы уже в очереди!</b> Ваш номер: <b>{position}</b>",
+            f"⚠️ <b>Ты уже в очереди!</b> Твой номер: <b>{position}</b>",
             parse_mode="HTML"
         )
         return
@@ -732,7 +714,7 @@ async def join_queue_start(message: Message, state: FSMContext):
     result = db.add_to_queue(message.from_user.id, user_name)
 
     if result == -1:
-        await message.answer("⚠️ <b>Вы уже в очереди!</b>", parse_mode="HTML")
+        await message.answer("⚠️ <b>Ты уже в очереди!</b>", parse_mode="HTML")
         return
 
     queue = db.get_queue()
@@ -740,10 +722,10 @@ async def join_queue_start(message: Message, state: FSMContext):
 
     if position:
         await message.answer(
-            f"✅ <b>Вы добавлены в очередь!</b>\n\n"
-            f"• Ваш номер: <b>{position}</b>\n"
-            f"• Имя в очереди: <b>{user_name}</b>\n"
-            f"• Людей перед вами: <b>{position - 1}</b>",
+            f"✅ <b>Ты добавлен в очередь!</b>\n\n"
+            f"• Твой номер: <b>{position}</b>\n"
+            f"• Твое имя: <b>{user_name}</b>\n"
+            f"• Людей перед тобой: <b>{position - 1}</b>",
             parse_mode="HTML"
         )
     else:
@@ -757,22 +739,22 @@ async def my_position(message: Message):
     if position:
         queue = db.get_queue()
         await message.answer(
-            f"🔢 <b>Ваш номер:</b> {position}\n"
-            f"👥 <b>Перед вами:</b> {position - 1}\n"
+            f"🔢 <b>Твой номер номер:</b> {position}\n"
+            f"👥 <b>Перед тобой:</b> {position - 1}\n"
             f"📊 <b>Всего в очереди:</b> {len(queue)}",
             parse_mode="HTML"
         )
     else:
-        await message.answer("ℹ️ <b>Вы не в очереди</b>", parse_mode="HTML")
+        await message.answer("ℹ️ <b>Ты не в очереди</b>", parse_mode="HTML")
 
 
 # ========== ВЫЙТИ ИЗ ОЧЕРЕДИ ==========
 @dp.message(F.text == "🚪 Выйти из очереди")
 async def leave_queue(message: Message):
     if db.remove_from_queue(message.from_user.id):
-        await message.answer("✅ <b>Вы вышли из очереди</b>", parse_mode="HTML")
+        await message.answer("✅ <b>Ты вышел из очереди</b>", parse_mode="HTML")
     else:
-        await message.answer("ℹ️ <b>Вы не были в очереди</b>", parse_mode="HTML")
+        await message.answer("ℹ️ <b>Ты не был в очереди</b>", parse_mode="HTML")
 
 # ========== СТАТУС КАБИНЕТА ==========
 @dp.message(F.text == "⏰ Статус кабинета")
@@ -806,7 +788,7 @@ async def admin_open(message: Message):
         return
     
     db.set_office_status("open", "Кабинет открыт")
-    await notify_all("ℹ️ <b>Кабинет открыт!</b> Можно вставать в очередь.")
+    await notify_all("ℹ️ <b>Кабинет открыт</b> Можно вставать в очередь.")
     await message.answer("✅ <b>Кабинет открыт</b>", parse_mode="HTML")
 
 
@@ -816,7 +798,7 @@ async def admin_close(message: Message):
         return
     
     db.set_office_status("closed", "Кабинет закрыт")
-    await notify_all("⚠️ <b>Кабинет закрыт!</b>")
+    await notify_all("⚠️ <b>Кабинет закрыт</b>")
     await message.answer("❌ <b>Кабинет закрыт</b>", parse_mode="HTML")
 
 
@@ -851,7 +833,7 @@ async def notify_all(text: str):
         try:
             await bot.send_message(
                 config.config.ADMIN_ID,
-                f"📊 Уведомление отправлено:\n"
+                f"    Уведомление отправлено:\n"
                 f"✅ Успешно: {success_count}\n"
                 f"❌ Не удалось: {fail_count}",
                 parse_mode="HTML"
