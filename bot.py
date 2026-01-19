@@ -71,6 +71,58 @@ async def cmd_start(message: Message):
             parse_mode="HTML"
         )
 
+# Перезагрузка сообщения очереди
+async def refresh_queue_management(chat_id: int, message_id: int = None):
+    """Обновить сообщение с управлением очередью"""
+    queue = db.get_queue()
+    
+    if queue:
+        # Получаем первого пользователя в очереди
+        first_user = queue[0]
+        first_user_name = first_user['name']
+        
+        text = f"👤 <b>Управление очередью</b>\n\n"
+        text += f"<b>Первый в очереди:</b>\n"
+        text += f"✅ <b>{first_user_name}</b>\n"
+        text += f"🆔 ID: {first_user['user_id']}\n"
+        text += f"⏰ В очереди с: {first_user['joined_at'][11:16]}\n\n"
+        
+        if len(queue) > 1:
+            text += f"<b>Ожидают:</b> {len(queue) - 1} человек(а)\n"
+            text += f"<b>Следующий:</b> {queue[1]['name']}\n"
+        
+        keyboard = keyboards.get_queue_management_keyboard(first_user_name)
+    else:
+        text = "👤 <b>Управление очередью</b>\n\n📭 <i>Очередь пуста</i>"
+        keyboard = keyboards.get_queue_management_keyboard()
+    
+    # Если есть message_id, редактируем сообщение
+    if message_id:
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+        except:
+            # Если не удалось редактировать (сообщение слишком старое), отправляем новое
+            await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+    else:
+        # Иначе отправляем новое сообщение
+        await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+
 # ========== КНОПКА УПРАВЛЕНИЯ ОЧЕРЕДЬЮ ==========
 @dp.message(F.text == "👤 Управление очередью")
 async def manage_queue(message: Message):
@@ -88,7 +140,6 @@ async def manage_queue(message: Message):
         text = f"👤 <b>Управление очередью</b>\n\n"
         text += f"<b>Первый в очереди:</b>\n"
         text += f"✅ <b>{first_user_name}</b>\n"
-        text += f"🆔 ID: {first_user['user_id']}\n"
         text += f"⏰ В очереди с: {first_user['joined_at'][11:16]}\n\n"
         
         if len(queue) > 1:
@@ -157,12 +208,16 @@ async def accept_user(message: Message):
         except:
             pass
         
-        await message.answer(
+        # Отправляем сообщение об удалении
+        response = await message.answer(
             f"❌ <b>Пользователь удален из очереди:</b>\n\n"
-            f"👤 {user_name}\n"
-            f"🆔 ID: {found_user['user_id']}",
+            f"👤 {user_name}",
             parse_mode="HTML"
         )
+        
+        # Обновляем управление очередью после паузы
+        await asyncio.sleep(1)
+        await refresh_queue_management(message.chat.id, response.message_id)
         return
     
     # Если это первый пользователь - принимаем его
@@ -183,27 +238,18 @@ async def accept_user(message: Message):
     # Удаляем пользователя из очереди
     db.remove_from_queue(user_id)
     
-    await message.answer(
+    # Отправляем сообщение о принятии
+    response = await message.answer(
         f"✅ <b>Пользователь принят и удален из очереди!</b>\n\n"
         f"👤 {user_name}\n"
-        f"🆔 ID: {user_id}\n\n"
         f"<i>Пользователь получил уведомление о приеме.</i>",
         parse_mode="HTML"
     )
     
-    # Показываем следующего пользователя, если есть
-    queue = db.get_queue()
-    if queue:
-        next_user = queue[0]
-        await asyncio.sleep(1)
-        await message.answer(
-            f"🎯 <b>Следующий в очереди:</b>\n\n"
-            f"👤 <b>{next_user['name']}</b>\n"
-            f"🆔 ID: {next_user['user_id']}\n"
-            f"⏰ В очереди с: {next_user['joined_at'][11:16]}\n\n"
-            f"<i>Для управления нажмите '👤 Управление очередью'</i>",
-            parse_mode="HTML"
-        )
+    # Обновляем управление очередью после паузы
+    await asyncio.sleep(1)
+    await refresh_queue_management(message.chat.id, response.message_id)
+
 
 
 # ========== КНОПКА ОТКЛОНЕНИЯ ПОЛЬЗОВАТЕЛЯ ==========
@@ -259,7 +305,6 @@ async def reject_user(message: Message):
     await message.answer(
         f"❌ <b>Пользователь отклонен и удален из очереди:</b>\n\n"
         f"👤 {user_name}\n"
-        f"🆔 ID: {user_id}\n"
         f"📊 Позиция была: {user_position}\n\n"
         f"<i>Пользователь получил уведомление.</i>",
         parse_mode="HTML"
@@ -273,7 +318,6 @@ async def reject_user(message: Message):
         await message.answer(
             f"🎯 <b>Следующий в очереди:</b>\n\n"
             f"👤 <b>{next_user['name']}</b>\n"
-            f"🆔 ID: {next_user['user_id']}\n"
             f"⏰ В очереди с: {next_user['joined_at'][11:16]}\n\n"
             f"<i>Для управления нажмите '👤 Управление очередью'</i>",
             parse_mode="HTML"
@@ -323,6 +367,7 @@ async def queue_statistics(message: Message):
         # Общее время ожидания всех
         text += f"<b>Общее время ожидания:</b> {total_waiting} мин.\n"
     
+    # Отправляем статистику в отдельном сообщении
     await message.answer(text, parse_mode="HTML")
 
 
@@ -403,11 +448,9 @@ async def join_queue_start(message: Message):
                     config.config.ADMIN_ID,
                     f"👤 <b>Новый пользователь в очереди!</b>\n\n"
                     f"• Имя: <b>{user_name}</b>\n"
-                    f"• ID: {message.from_user.id}\n"
                     f"• Позиция в очереди: <b>{position}</b>\n"
                     f"• Всего в очереди: <b>{total_in_queue}</b>\n\n"
-                    f"<b>Текущая очередь:</b>\n{queue_info}\n"
-                    f"<i>Для управления нажмите '👤 Управление очередью'</i>",
+                    f"<b>Текущая очередь:</b>\n{queue_info}\n",
                     parse_mode="HTML"
                 )
             except Exception as e:
@@ -417,7 +460,6 @@ async def join_queue_start(message: Message):
 
 
 # ========== КНОПКА НАЗАД В МЕНЮ ==========
-@dp.message(F.text == "◀️ Назад в меню")
 async def back_to_menu(message: Message):
     if message.from_user.id == config.config.ADMIN_ID:
         await message.answer(
@@ -569,14 +611,14 @@ async def process_new_name(message: Message, state: FSMContext):
     user_id = data.get('user_id')
     current_name = data.get('current_name')
     
-    # Меняем имя в базе данных (теперь только в таблице users)
+    # Меняем имя в базе данных
     success = db.update_user_display_name(user_id, new_name)
     
     if success:
         # Получаем обновленную позицию
         position = db.get_user_position(user_id)
         
-        await message.answer(
+        response = await message.answer(
             f"✅ <b>Имя успешно изменено!</b>\n\n"
             f"👤 Пользователь ID: {user_id}\n"
             f"📝 Было: <b>{current_name}</b>\n"
@@ -597,7 +639,13 @@ async def process_new_name(message: Message, state: FSMContext):
                     parse_mode="HTML"
                 )
             except:
-                pass  # Пользователь заблокировал бота или удалил чат
+                pass
+        
+        # Если пользователь был первым в очереди, обновляем управление очередью
+        queue = db.get_queue()
+        if queue and queue[0]['user_id'] == user_id:
+            await asyncio.sleep(1)
+            await refresh_queue_management(message.chat.id, response.message_id)
     else:
         await message.answer(
             "❌ <b>Не удалось изменить имя.</b>\n"
