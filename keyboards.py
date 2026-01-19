@@ -12,7 +12,14 @@ def get_user_keyboard(is_admin: bool = False):
     ]
     
     if is_admin:
-        buttons.append([KeyboardButton(text="Админ-панель")])
+        buttons.append([InlineKeyboardButton(text="✅ Открыть кабинет", callback_data="admin_open")])
+        buttons.append([InlineKeyboardButton(text="❌ Закрыть кабинет", callback_data="admin_close")])
+        buttons.append([InlineKeyboardButton(text="⏸️ Приостановить", callback_data="admin_pause")])
+        buttons.append([InlineKeyboardButton(text="➡️ Пропустить следующего", callback_data="admin_next")])
+        buttons.append([InlineKeyboardButton(text="🗑️ Очистить очередь", callback_data="admin_clear")])
+        buttons.append([InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")])
+        buttons.append([InlineKeyboardButton(text="👥 Текущая очередь", callback_data="admin_view")])
+        buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_back")])
     
     return ReplyKeyboardMarkup(
         keyboard=buttons,
