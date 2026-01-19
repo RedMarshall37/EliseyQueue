@@ -4,6 +4,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from datetime import datetime
 
 import config
 import keyboards
@@ -39,16 +40,16 @@ async def cmd_start(message: Message):
 
     if is_admin:
         welcome_text = (
-             "👋 <b>Приветствую, Елисей!</b>\n\n"
+            "👋 <b>Приветствую, Елисей!</b>\n\n"
             "<b>Основные функции:</b>\n"
             "• 👀 Посмотреть текущую очередь\n"
             "• ⏰ Проверить статус кабинета\n"
             "<b>Функции главного любителя белого монстра:</b>\n"
             "• ✅ Открыть кабинет\n"
             "• ❌ Закрыть кабинет\n"
-            "• ⏸️ Приостановить\n"
             "• 🗑️ Очистить очередь\n"
-            "• ✏️ Изменить имя пользователя"
+            "• ✏️ Изменить имя пользователя\n"
+            "• 👤 Управление очередью"
         )
         await message.answer(
             welcome_text,
@@ -67,6 +68,456 @@ async def cmd_start(message: Message):
         )
         await message.answer(
             welcome_text,
+            reply_markup=keyboards.get_user_keyboard(),
+            parse_mode="HTML"
+        )
+
+# ========== КНОПКА УПРАВЛЕНИЯ ОЧЕРЕДЬЮ ==========
+@dp.message(F.text == "👤 Управление очередью")
+async def manage_queue(message: Message):
+    if message.from_user.id != config.config.ADMIN_ID:
+        await message.answer("❌ <b>Доступ запрещен!</b>", parse_mode="HTML")
+        return
+    
+    queue = db.get_queue()
+    current_serving = db.get_current_serving_user()
+    
+    text = "<b>👤 Управление очередью</b>\n\n"
+    
+    if current_serving:
+        current_user = db.get_user_info(current_serving)
+        if current_user:
+            text += f"<b>Сейчас принимается:</b>\n"
+            text += f"👤 <b>{current_user['name']}</b> (ID: {current_serving})\n\n"
+    
+    if queue:
+        text += f"<b>Ожидают в очереди:</b> {len(queue)} человек(а)\n"
+        
+        # Показываем первых 5 в очереди
+        text += "\n<b>Первые в очереди:</b>\n"
+        for i, user in enumerate(queue[:5], 1):
+            text += f"{i}. {user['name']}"
+            if current_serving == user['user_id']:
+                text += " ✅ <i>(принимается сейчас)</i>"
+            text += "\n"
+        
+        if len(queue) > 5:
+            text += f"... и еще {len(queue) - 5}\n"
+    else:
+        text += "📭 <i>Очередь пуста</i>\n"
+    
+    await message.answer(
+        text,
+        reply_markup=keyboards.get_queue_management_keyboard(),
+        parse_mode="HTML"
+    )
+
+
+# ========== КНОПКА ПРИНЯТЬ СЛЕДУЮЩЕГО ==========
+@dp.message(F.text == "🎯 Показать следующего")
+async def accept_next_user(message: Message):
+    if message.from_user.id != config.config.ADMIN_ID:
+        return
+    
+    # Проверяем, не принимается ли уже кто-то
+    current_serving = db.get_current_serving_user()
+    if current_serving:
+        current_user = db.get_user_info(current_serving)
+        if current_user:
+            await message.answer(
+                f"⚠️ <b>Вы уже принимаете пользователя:</b>\n"
+                f"👤 {current_user['name']}\n\n"
+                f"Сначала завершите прием текущего.",
+                parse_mode="HTML"
+            )
+            return
+    
+    # Получаем первого пользователя в очереди
+    first_user = db.get_first_user_in_queue()
+    
+    if not first_user:
+        await message.answer(
+            "📭 <b>Очередь пуста!</b>\n"
+            "Нет пользователей для приема.",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Устанавливаем, что этот пользователь сейчас принимается
+    db.set_current_serving_user(first_user['user_id'])
+    
+    # Отправляем админу сообщение с кнопками
+    await message.answer(
+        f"🎯 <b>Пользователь ожидает приема:</b>\n\n"
+        f"👤 <b>{first_user['name']}</b>\n"
+        f"🆔 ID: {first_user['user_id']}\n"
+        f"⏰ В очереди с: {first_user['joined_at'][11:16]}\n\n"
+        f"<i>Выберите действие:</i>",
+        reply_markup=keyboards.get_accept_reject_keyboard(first_user['user_id']),
+        parse_mode="HTML"
+    )
+
+
+# ========== CALLBACK ДЛЯ ПРИНЯТИЯ/ОТКЛОНЕНИЯ ==========
+@dp.callback_query(F.data.startswith("accept_") | F.data.startswith("reject_"))
+async def handle_accept_reject(callback: CallbackQuery):
+    if callback.from_user.id != config.config.ADMIN_ID:
+        await callback.answer("❌ Доступ запрещен!", show_alert=True)
+        return
+    
+    action, user_id_str = callback.data.split("_")
+    user_id = int(user_id_str)
+    
+    # Проверяем, что это действительно текущий обслуживаемый пользователь
+    current_serving = db.get_current_serving_user()
+    if current_serving != user_id:
+        await callback.answer("⚠️ Этот пользователь уже не в очереди!", show_alert=True)
+        await callback.message.delete()
+        return
+    
+    user_info = db.get_user_info(user_id)
+    
+    if not user_info:
+        await callback.answer("❌ Пользователь не найден!", show_alert=True)
+        await callback.message.delete()
+        return
+    
+    if action == "accept":
+        # Уведомляем пользователя
+        try:
+            await bot.send_message(
+                user_id,
+                f"✅ <b>Елисей готов вас принять!</b>\n\n"
+                f"Подойдите к кабинету.\n"
+                f"Ваше имя в очереди: <b>{user_info['name']}</b>",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            print(f"Не удалось уведомить пользователя {user_id}: {e}")
+        
+        # Отправляем админу сообщение о завершении приема
+        await callback.message.edit_text(
+            f"✅ <b>Пользователь принят!</b>\n\n"
+            f"👤 {user_info['name']}\n"
+            f"🆔 ID: {user_id}\n\n"
+            f"<i>После завершения приема нажмите кнопку ниже:</i>",
+            parse_mode="HTML"
+        )
+        await callback.message.edit_reply_markup(
+            reply_markup=keyboards.get_finish_reception_keyboard()
+        )
+        
+        await callback.answer("✅ Пользователь уведомлен о приеме")
+        
+    elif action == "reject":
+        # Удаляем пользователя из очереди
+        db.remove_from_queue(user_id)
+        db.set_current_serving_user(None)  # Сбрасываем текущего
+        
+        # Уведомляем пользователя
+        try:
+            await bot.send_message(
+                user_id,
+                f"❌ <b>Елисей пока не готов вас принять</b>\n\n"
+                f"Попробуйте встать в очередь позже.\n"
+                f"Ваше имя в очереди: <b>{user_info['name']}</b>",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            print(f"Не удалось уведомить пользователя {user_id}: {e}")
+        
+        # Обновляем сообщение админу
+        await callback.message.edit_text(
+            f"❌ <b>Пользователь отклонен и удален из очереди</b>\n\n"
+            f"👤 {user_info['name']}\n"
+            f"🆔 ID: {user_id}",
+            parse_mode="HTML"
+        )
+        await callback.message.edit_reply_markup(reply_markup=None)
+        
+        await callback.answer("❌ Пользователь отклонен")
+        
+        # Показываем следующего в очереди, если есть
+        first_user = db.get_first_user_in_queue()
+        if first_user:
+            await asyncio.sleep(1)
+            await callback.message.answer(
+                f"🎯 <b>Следующий в очереди:</b>\n\n"
+                f"👤 <b>{first_user['name']}</b>\n"
+                f"🆔 ID: {first_user['user_id']}\n"
+                f"⏰ В очереди с: {first_user['joined_at'][11:16]}\n\n"
+                f"<i>Нажмите '🎯 Принять следующего' для управления</i>",
+                parse_mode="HTML"
+            )
+
+
+# ========== CALLBACK ДЛЯ ЗАВЕРШЕНИЯ ПРИЕМА ==========
+@dp.callback_query(F.data == "finish_reception")
+async def handle_finish_reception(callback: CallbackQuery):
+    if callback.from_user.id != config.config.ADMIN_ID:
+        await callback.answer("❌ Доступ запрещен!", show_alert=True)
+        return
+    
+    current_serving = db.get_current_serving_user()
+    
+    if not current_serving:
+        await callback.answer("⚠️ Нет активного приема!", show_alert=True)
+        await callback.message.delete()
+        return
+    
+    # Удаляем пользователя из очереди
+    user_info = db.get_user_info(current_serving)
+    db.remove_from_queue(current_serving)
+    db.set_current_serving_user(None)  # Сбрасываем текущего
+    
+    # Обновляем сообщение
+    await callback.message.edit_text(
+        f"✅ <b>Прием завершен!</b>\n\n"
+        f"👤 {user_info['name']} был обслужен и удален из очереди.",
+        parse_mode="HTML"
+    )
+    await callback.message.edit_reply_markup(reply_markup=None)
+    
+    await callback.answer("✅ Прием завершен")
+    
+    # Автоматически показываем следующего в очереди, если есть
+    first_user = db.get_first_user_in_queue()
+    if first_user:
+        await asyncio.sleep(1)
+        await callback.message.answer(
+            f"🎯 <b>Следующий в очереди:</b>\n\n"
+            f"👤 <b>{first_user['name']}</b>\n"
+            f"🆔 ID: {first_user['user_id']}\n"
+            f"⏰ В очереди с: {first_user['joined_at'][11:16]}\n\n"
+            f"<i>Нажмите '🎯 Принять следующего' для управления</i>",
+            parse_mode="HTML"
+        )
+
+
+# ========== КНОПКА ОТКЛОНИТЬ СЛЕДУЮЩЕГО ==========
+@dp.message(F.text == "❌ Отклонить следующего")
+async def reject_next_user(message: Message):
+    if message.from_user.id != config.config.ADMIN_ID:
+        return
+    
+    # Проверяем, не принимается ли уже кто-то
+    current_serving = db.get_current_serving_user()
+    if current_serving:
+        await message.answer(
+            "⚠️ <b>Сначала завершите прием текущего пользователя!</b>",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Получаем первого пользователя в очереди
+    first_user = db.get_first_user_in_queue()
+    
+    if not first_user:
+        await message.answer(
+            "📭 <b>Очередь пуста!</b>",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Сразу удаляем и уведомляем
+    db.remove_from_queue(first_user['user_id'])
+    
+    # Уведомляем пользователя
+    try:
+        await bot.send_message(
+            first_user['user_id'],
+            f"❌ <b>Елисей пока не готов вас принять</b>\n\n"
+            f"Попробуйте встать в очередь позже.\n"
+            f"Ваше имя в очереди: <b>{first_user['name']}</b>",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print(f"Не удалось уведомить пользователя {first_user['user_id']}: {e}")
+    
+    await message.answer(
+        f"❌ <b>Пользователь отклонен:</b>\n\n"
+        f"👤 {first_user['name']}\n"
+        f"🆔 ID: {first_user['user_id']}\n\n"
+        f"<i>Пользователь удален из очереди и получил уведомление.</i>",
+        parse_mode="HTML"
+    )
+
+
+# ========== КНОПКА ЗАВЕРШИТЬ ПРИЕМ ТЕКУЩЕГО ==========
+@dp.message(F.text == "✅ Завершить прием текущего")
+async def finish_current_reception(message: Message):
+    if message.from_user.id != config.config.ADMIN_ID:
+        return
+    
+    current_serving = db.get_current_serving_user()
+    
+    if not current_serving:
+        await message.answer(
+            "ℹ️ <b>Нет активного приема пользователя.</b>",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Получаем информацию о пользователе
+    user_info = db.get_user_info(current_serving)
+    
+    # Удаляем пользователя из очереди
+    db.remove_from_queue(current_serving)
+    db.set_current_serving_user(None)
+    
+    await message.answer(
+        f"✅ <b>Прием завершен!</b>\n\n"
+        f"👤 {user_info['name']} был обслужен и удален из очереди.",
+        parse_mode="HTML"
+    )
+    
+    # Показываем следующего в очереди, если есть
+    first_user = db.get_first_user_in_queue()
+    if first_user:
+        await asyncio.sleep(1)
+        await message.answer(
+            f"🎯 <b>Следующий в очереди:</b>\n\n"
+            f"👤 <b>{first_user['name']}</b>\n"
+            f"🆔 ID: {first_user['user_id']}\n"
+            f"⏰ В очереди с: {first_user['joined_at'][11:16]}\n\n"
+            f"<i>Нажмите '🎯 Принять следующего' для управления</i>",
+            parse_mode="HTML"
+        )
+
+
+# ========== КНОПКА СТАТИСТИКА ОЧЕРЕДИ ==========
+@dp.message(F.text == "📊 Статистика очереди")
+async def queue_statistics(message: Message):
+    if message.from_user.id != config.config.ADMIN_ID:
+        return
+    
+    queue = db.get_queue()
+    current_serving = db.get_current_serving_user()
+    
+    text = "<b>📊 Статистика очереди</b>\n\n"
+    
+    if current_serving:
+        current_user = db.get_user_info(current_serving)
+        if current_user:
+            text += f"<b>Сейчас принимается:</b> {current_user['name']}\n\n"
+    
+    text += f"<b>Всего в очереди:</b> {len(queue)} человек(а)\n"
+    
+    if queue:
+        # Среднее время ожидания
+        total_waiting = 0
+        now = datetime.now()
+        
+        for user in queue:
+            joined_at = datetime.fromisoformat(user['joined_at'])
+            waiting_time = (now - joined_at).seconds // 60  # в минутах
+            total_waiting += waiting_time
+        
+        if len(queue) > 0:
+            avg_waiting = total_waiting // len(queue)
+            text += f"<b>Среднее время ожидания:</b> {avg_waiting} мин.\n"
+        
+        # Самый долго ждущий
+        first_user = queue[0]
+        first_joined = datetime.fromisoformat(first_user['joined_at'])
+        longest_wait = (now - first_joined).seconds // 60
+        text += f"<b>Дольше всех ждет:</b> {first_user['name']} ({longest_wait} мин.)\n"
+    
+    await message.answer(text, parse_mode="HTML")
+
+
+# ========== УВЕДОМЛЕНИЕ АДМИНУ О НОВОМ ПОЛЬЗОВАТЕЛЕ ==========
+# Модифицируем функцию вставания в очередь
+@dp.message(F.text == "📝 Встать в очередь")
+async def join_queue_start(message: Message):
+    status = db.get_office_status()
+
+    if message.from_user.id == config.config.ADMIN_ID:
+        await message.answer(
+            "👑 <b>Босс ВТиПО не может вставать в очередь.</b>",
+            parse_mode="HTML"
+        )
+        return
+
+    if status["status"] == "closed":
+        await message.answer(
+            f"❌ <b>Кабинет закрыт!</b>\n{status.get('message', '')}",
+            parse_mode="HTML"
+        )
+        return
+
+    position = db.get_user_position(message.from_user.id)
+    if position:
+        await message.answer(
+            f"⚠️ <b>Вы уже в очереди!</b> Ваш номер: <b>{position}</b>",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Получаем имя пользователя из аккаунта Telegram
+    user_name = message.from_user.first_name
+    if message.from_user.last_name:
+        user_name += f" {message.from_user.last_name}"
+
+     # Если нет имени, используем username
+    if not user_name or user_name.strip() == "":
+        if message.from_user.username:
+            user_name = f"@{message.from_user.username}"
+        else:
+            user_name = f"User_{message.from_user.id}"
+
+    # Добавляем в очередь
+    result = db.add_to_queue(message.from_user.id, user_name)
+
+    if result == -1:
+        await message.answer("⚠️ <b>Вы уже в очереди!</b>", parse_mode="HTML")
+        return
+
+    position = db.get_user_position(message.from_user.id)
+
+    if position:
+        await message.answer(
+            f"✅ <b>Вы добавлены в очередь!</b>\n\n"
+            f"• Ваш номер: <b>{position}</b>\n"
+            f"• Имя в очереди: <b>{user_name}</b>\n"
+            f"• Людей перед вами: <b>{position - 1}</b>",
+            parse_mode="HTML"
+        )
+        
+        # УВЕДОМЛЕНИЕ АДМИНУ О НОВОМ ПОЛЬЗОВАТЕЛЕ
+        if config.config.ADMIN_ID:
+            try:
+                queue = db.get_queue()
+                total_in_queue = len(queue)
+                
+                await bot.send_message(
+                    config.config.ADMIN_ID,
+                    f"👤 <b>Новый пользователь в очереди!</b>\n\n"
+                    f"• Имя: <b>{user_name}</b>\n"
+                    f"• ID: {message.from_user.id}\n"
+                    f"• Позиция в очереди: <b>{position}</b>\n"
+                    f"• Всего в очереди: <b>{total_in_queue}</b>\n\n"
+                    f"<i>Для управления очередью нажмите '👤 Управление очередью'</i>",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                print(f"Не удалось отправить уведомление админу: {e}")
+    else:
+        await message.answer("❌ <b>Произошла ошибка при добавлении в очередь</b>", parse_mode="HTML")
+
+
+# ========== КНОПКА НАЗАД В МЕНЮ ==========
+@dp.message(F.text == "◀️ Назад в меню")
+async def back_to_menu(message: Message):
+    if message.from_user.id == config.config.ADMIN_ID:
+        await message.answer(
+            "🏠 <b>Главное меню админа</b>",
+            reply_markup=keyboards.get_admin_keyboard(),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            "🏠 <b>Главное меню</b>",
             reply_markup=keyboards.get_user_keyboard(),
             parse_mode="HTML"
         )
