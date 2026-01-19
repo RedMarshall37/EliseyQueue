@@ -208,8 +208,8 @@ async def process_new_name(message: Message, state: FSMContext):
     user_id = data.get('user_id')
     current_name = data.get('current_name')
     
-    # Меняем имя в базе данных
-    success = db.update_user_name_in_queue(user_id, new_name)
+    # Меняем имя в базе данных (теперь только в таблице users)
+    success = db.update_user_display_name(user_id, new_name)
     
     if success:
         # Получаем обновленную позицию
@@ -290,8 +290,8 @@ async def view_queue(message: Message):
 # ========== ВСТАТЬ В ОЧЕРЕДЬ ==========
 @dp.message(F.text == "📝 Встать в очередь")
 async def join_queue_start(message: Message, state: FSMContext):
-    # Сохраняем пользователя
-    db.add_or_update_user(
+    # Сохраняем пользователя и получаем его display_name
+    display_name = db.add_or_update_user(
         user_id=message.from_user.id,
         username=message.from_user.username,
         first_name=message.from_user.first_name,
