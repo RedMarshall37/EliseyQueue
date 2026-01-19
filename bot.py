@@ -41,7 +41,7 @@ async def cmd_start(message: Message):
     )
 
 # ========== ПОСМОТРЕТЬ ОЧЕРЕДЬ ==========
-@dp.message(F.text == "👀 Посмотреть очередь")
+@dp.message(F.text == "👀 Посмотреть очередь", state="*")
 async def view_queue(message: Message):
     queue = db.get_queue()
     status = db.get_office_status()
@@ -123,15 +123,16 @@ async def my_position(message: Message):
         await message.answer("ℹ️ *Вы не в очереди*", parse_mode="Markdown")
 
 # ========== ВЫЙТИ ИЗ ОЧЕРЕДИ ==========
-@dp.message(F.text == "🚪 Выйти из очереди")
+@dp.message(F.text == "🚪 Выйти из очереди", state="*")
 async def leave_queue(message: Message):
     if db.remove_from_queue(message.from_user.id):
+         await state.clear()
         await message.answer("✅ *Вы вышли из очереди*", parse_mode="Markdown")
     else:
         await message.answer("ℹ️ *Вы не были в очереди*", parse_mode="Markdown")
 
 # ========== СТАТУС КАБИНЕТА ==========
-@dp.message(F.text == "⏰ Статус кабинета")
+@dp.message(F.text == "⏰ Статус кабинета", state="*")
 async def office_status(message: Message):
     status = db.get_office_status()
     
@@ -318,4 +319,5 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+
     asyncio.run(main())
