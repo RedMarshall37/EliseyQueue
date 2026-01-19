@@ -38,7 +38,7 @@ def get_queue_management_keyboard(first_user_name: str = None):
         # Если есть пользователь в очереди
         buttons = [
             [KeyboardButton(text=f"❌ Отклонить {first_user_name}"), KeyboardButton(text=f"✅ Принять {first_user_name}")],
-            KeyboardButton(text="◀️ Назад в меню"), [KeyboardButton(text="📊 Статистика очереди")],
+            [KeyboardButton(text="◀️ Назад в меню"), KeyboardButton(text="📊 Статистика очереди")],
         ]
     else:
         # Если очередь пуста
