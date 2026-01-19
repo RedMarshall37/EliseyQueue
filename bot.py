@@ -58,7 +58,7 @@ async def view_queue(message: Message):
         text = "📭 *Очередь пуста*\n\n"
     else:
         text = "📋 *Текущая очередь:*\n\n"
-        for i, user in enumerate(queue, 1):
+        for i, user in enumerate(queue, start=1):
             text += f"{i}. {user['name']}\n"
         text += f"\n*Всего в очереди:* {len(queue)} человек(а)\n"
 
