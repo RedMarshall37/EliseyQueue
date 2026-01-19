@@ -23,7 +23,6 @@ db = database.db
 
 # ========== /start ==========
 @dp.message(Command("start"))
-@dp.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
 
@@ -46,7 +45,6 @@ async def cmd_start(message: Message, state: FSMContext):
             "<b>Функции главного любителя белого монстра:</b>\n"
             "• ✅ Открыть кабинет\n"
             "• ❌ Закрыть кабинет\n"
-            "• ⏸️ Приостановить\n"
             "• 🗑️ Очистить очередь"
         )
         await message.answer(
@@ -89,8 +87,7 @@ async def view_queue(message: Message):
 
     status_map = {
         "open": "✅ Открыт",
-        "closed": "❌ Закрыт",
-        "paused": "⏸️ Приостановлен"
+        "closed": "❌ Закрыт"
     }
 
     text += f"\n*Статус кабинета:* {status_map.get(status['status'], status['status'])}"
@@ -116,13 +113,6 @@ async def join_queue_start(message: Message, state: FSMContext):
     if status["status"] == "closed":
         await message.answer(
             f"❌ *Кабинет закрыт!*\n{status.get('message', '')}",
-            parse_mode="Markdown"
-        )
-        return
-
-    if status["status"] == "paused":
-        await message.answer(
-            f"⏸️ *Прием приостановлен!*\n{status.get('message', '')}",
             parse_mode="Markdown"
         )
         return
@@ -225,16 +215,6 @@ async def admin_close(message: Message):
     await message.answer("❌ <b>Кабинет закрыт</b>", parse_mode="HTML")
 
 
-@dp.message(F.text == "⏸️ Приостановить")
-async def admin_pause(message: Message):
-    if message.from_user.id != config.config.ADMIN_ID:
-        return
-    
-    db.set_office_status("paused", "Прием приостановлен")
-    await notify_all("⏸️ <b>Прием приостановлен!</b>")
-    await message.answer("⏸️ <b>Прием приостановлен</b>", parse_mode="HTML")
-
-
 @dp.message(F.text == "🗑️ Очистить очередь")
 async def admin_clear(message: Message):
     if message.from_user.id != config.config.ADMIN_ID:
@@ -245,7 +225,6 @@ async def admin_clear(message: Message):
     await message.answer("🗑️ <b>Очередь очищена</b>", parse_mode="HTML")
 
 
-# ========== УВЕДОМЛЕНИЯ ==========
 # ========== УВЕДОМЛЕНИЯ ==========
 async def notify_all(text: str):
     """Отправить уведомление всем пользователям бота"""
@@ -280,12 +259,6 @@ async def notify_all(text: str):
 async def main():
     print("🤖 Бот 'Очередь в кабинет Елисея' запущен...")
     print(f"👑 Админ ID: {config.config.ADMIN_ID}")
-
-    try:
-        if not db.redis.exists("office:status"):
-            db.set_office_status("open")
-    except Exception as e:
-        print("⚠️ Redis недоступен:", e)
 
     await dp.start_polling(bot)
 
