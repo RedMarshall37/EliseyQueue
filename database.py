@@ -160,5 +160,34 @@ class QueueDB:
             return dict(row)
         return {"status": "closed", "message": "", "updated_at": datetime.now().isoformat()}
 
+    # ---------------- Переименовывание пользователя ----------------
+    def update_user_name_in_queue(self, user_id: int, new_name: str) -> bool:
+        """Изменить имя пользователя в очереди"""
+        self.cursor.execute(
+            "UPDATE queue SET name = ? WHERE user_id = ?",
+            (new_name, user_id)
+        )
+        changed = self.cursor.rowcount
+        self.conn.commit()
+        return changed > 0
+
+    def get_user_info(self, user_id: int) -> Optional[Dict]:
+        """Получить информацию о пользователе"""
+        self.cursor.execute(
+            "SELECT * FROM queue WHERE user_id = ?",
+            (user_id,)
+        )
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def search_user_by_name(self, search_term: str) -> List[Dict]:
+        """Поиск пользователя по имени (частичному совпадению)"""
+        self.cursor.execute(
+            "SELECT * FROM queue WHERE name LIKE ? ORDER BY joined_at",
+            (f"%{search_term}%",)
+        )
+        rows = self.cursor.fetchall()
+        return [dict(row) for row in rows]
+
 # ---------------- Экземпляр ----------------
 db = QueueDB()
