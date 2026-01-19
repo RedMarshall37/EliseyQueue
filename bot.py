@@ -29,8 +29,8 @@ async def cmd_start(message: Message, state: FSMContext):
     is_admin = message.from_user.id == config.config.ADMIN_ID
 
     welcome_text = (
-        "👋 *Добро пожаловать в систему очереди в кабинет Елисея!*\n\n"
-        "*Основные функции:*\n"
+        "👋 <b>Добро пожаловать в систему очереди в кабинет Елисея!</b>\n\n"
+        "<b>Основные функции:</b>\n"
         "• 👀 Посмотреть текущую очередь\n"
         "• 📝 Встать в очередь\n"
         "• 🔍 Узнать свой номер\n"
@@ -41,9 +41,8 @@ async def cmd_start(message: Message, state: FSMContext):
     await message.answer(
         welcome_text,
         reply_markup=keyboards.get_user_keyboard(is_admin),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
-
 
 # ========== ПОСМОТРЕТЬ ОЧЕРЕДЬ ==========
 @dp.message(
@@ -217,20 +216,15 @@ async def admin_panel(message: Message):
     status = db.get_office_status()
 
     text = (
-        "*Админ-панель*\n\n"
-        f"Статус кабинета: *{status['status']}*\n"
-        f"Людей в очереди: *{len(queue)}*\n"
-    )
-
-    await message.answer(
-        "Test",
-        parse_mode="Markdown"
+        "\\*Админ\\-панель\\*\n\n"
+        f"Статус кабинета: \\*{status['status']}\\*\n"
+        f"Людей в очереди: \\*{len(queue)}\\*\n"
     )
 
     await message.answer(
         text,
         reply_markup=keyboards.get_admin_keyboard(),
-        parse_mode="Markdown"
+        parse_mode="MarkdownV2"  # Изменено на MarkdownV2
     )
 
 
@@ -289,4 +283,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
