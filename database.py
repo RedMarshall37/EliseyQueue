@@ -1,99 +1,117 @@
-import redis
-import json
+import sqlite3
 from typing import List, Optional, Dict
 from datetime import datetime
-import config
+
+DB_PATH = "queue.db"  # Можно изменить путь, если нужно
 
 class QueueDB:
     def __init__(self):
-        self.redis = redis.from_url(config.config.REDIS_URL, decode_responses=True)
-    
-    # Очередь
+        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.cursor = self.conn.cursor()
+        self._setup_tables()
+
+    def _setup_tables(self):
+        # Таблица для очереди
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS queue (
+            user_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            joined_at TEXT NOT NULL
+        )
+        """)
+        
+        # Таблица для статуса кабинета
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS office_status (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            status TEXT NOT NULL,
+            message TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """)
+        
+        # Инициализируем статус кабинета, если пусто
+        self.cursor.execute("SELECT COUNT(*) FROM office_status")
+        if self.cursor.fetchone()[0] == 0:
+            self.set_office_status("closed")
+        
+        self.conn.commit()
+
+    # ---------------- Очередь ----------------
+
     def add_to_queue(self, user_id: int, name: str) -> int:
-        """Добавить пользователя в очередь, вернуть его номер"""
-        queue_key = "office:queue"
-        
-        # Проверяем, не в очереди ли уже
-        if self.redis.hexists("office:users", user_id):
+        """Добавить пользователя в очередь, вернуть его позицию"""
+        # Проверка, не в очереди ли уже
+        if self.get_user_position(user_id):
             return -1
-        
-        # Генерируем ID для позиции
-        position_id = self.redis.incr("office:counter")
-        
-        user_data = {
-            "user_id": user_id,
-            "name": name,
-            "position": position_id,
-            "joined_at": datetime.now().isoformat()
-        }
-        
-        # Сохраняем в хэше пользователей
-        self.redis.hset("office:users", user_id, json.dumps(user_data))
-        # Добавляем в очередь
-        self.redis.rpush(queue_key, user_id)
-        
-        return position_id
-    
+
+        joined_at = datetime.now().isoformat()
+        self.cursor.execute(
+            "INSERT INTO queue (user_id, name, joined_at) VALUES (?, ?, ?)",
+            (user_id, name, joined_at)
+        )
+        self.conn.commit()
+        return self.get_user_position(user_id)
+
     def remove_from_queue(self, user_id: int) -> bool:
         """Удалить пользователя из очереди"""
-        if self.redis.hexists("office:users", user_id):
-            self.redis.hdel("office:users", user_id)
-            self.redis.lrem("office:queue", 0, user_id)
-            return True
-        return False
-    
+        self.cursor.execute("DELETE FROM queue WHERE user_id = ?", (user_id,))
+        changed = self.cursor.rowcount
+        self.conn.commit()
+        return changed > 0
+
     def get_queue(self) -> List[Dict]:
-        """Получить всю очередь"""
-        user_ids = self.redis.lrange("office:queue", 0, -1)
-        queue = []
-        
-        for user_id in user_ids:
-            user_data = self.redis.hget("office:users", user_id)
-            if user_data:
-                queue.append(json.loads(user_data))
-        
-        return queue
-    
+        """Получить всю очередь в порядке добавления"""
+        self.cursor.execute("SELECT * FROM queue ORDER BY joined_at")
+        rows = self.cursor.fetchall()
+        return [dict(row) for row in rows]
+
     def get_user_position(self, user_id: int) -> Optional[int]:
-        """Получить позицию пользователя в очереди"""
-        user_ids = self.redis.lrange("office:queue", 0, -1)
-        
-        try:
-            position = user_ids.index(str(user_id)) + 1
-            return position
-        except ValueError:
-            return None
-    
-    # Управление кабинетом
-    def set_office_status(self, status: str, message: str = ""):
-        """Установить статус кабинета (open/closed/paused)"""
-        data = {
-            "status": status,
-            "message": message,
-            "updated_at": datetime.now().isoformat()
-        }
-        self.redis.set("office:status", json.dumps(data))
-    
-    def get_office_status(self) -> Dict:
-        """Получить статус кабинета"""
-        data = self.redis.get("office:status")
-        if data:
-            return json.loads(data)
-        return {"status": "closed", "message": "", "updated_at": datetime.now().isoformat()}
-    
-    def clear_queue(self):
-        """Очистить всю очередь"""
-        self.redis.delete("office:queue")
-        self.redis.delete("office:users")
-    
-    def get_next_user(self) -> Optional[Dict]:
-        """Получить следующего пользователя и удалить из очереди"""
-        user_id = self.redis.lpop("office:queue")
-        if user_id:
-            user_data = self.redis.hget("office:users", user_id)
-            self.redis.hdel("office:users", user_id)
-            if user_data:
-                return json.loads(user_data)
+        """Получить позицию пользователя в очереди (1 = первый)"""
+        queue = self.get_queue()
+        for i, user in enumerate(queue, start=1):
+            if user["user_id"] == user_id:
+                return i
         return None
 
+    def clear_queue(self):
+        """Очистить всю очередь"""
+        self.cursor.execute("DELETE FROM queue")
+        self.conn.commit()
+
+    def get_next_user(self) -> Optional[Dict]:
+        """Получить следующего пользователя и удалить его из очереди"""
+        self.cursor.execute("SELECT * FROM queue ORDER BY joined_at LIMIT 1")
+        row = self.cursor.fetchone()
+        if row:
+            user = dict(row)
+            self.remove_from_queue(user["user_id"])
+            return user
+        return None
+
+    # ---------------- Статус кабинета ----------------
+
+    def set_office_status(self, status: str, message: str = ""):
+        """Установить статус кабинета (open/closed/paused)"""
+        updated_at = datetime.now().isoformat()
+        self.cursor.execute("""
+        INSERT INTO office_status (id, status, message, updated_at)
+        VALUES (1, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            status=excluded.status,
+            message=excluded.message,
+            updated_at=excluded.updated_at
+        """, (status, message, updated_at))
+        self.conn.commit()
+
+    def get_office_status(self) -> Dict:
+        """Получить статус кабинета"""
+        self.cursor.execute("SELECT * FROM office_status WHERE id = 1")
+        row = self.cursor.fetchone()
+        if row:
+            return dict(row)
+        return {"status": "closed", "message": "", "updated_at": datetime.now().isoformat()}
+
+# ---------------- Экземпляр ----------------
 db = QueueDB()
