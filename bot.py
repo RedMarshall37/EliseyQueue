@@ -282,6 +282,35 @@ async def main():
 
     await dp.start_polling(bot)
 
+@dp.callback_query(F.data == "admin_panel")
+async def admin_panel_callback(callback: CallbackQuery):
+    if callback.from_user.id != config.config.ADMIN_ID:
+        await callback.answer("❌ Доступ запрещен!", show_alert=True)
+        return
+
+    queue = db.get_queue()
+    status = db.get_office_status()
+
+    status_map = {
+        "open": "✅ Открыт",
+        "closed": "❌ Закрыт",
+        "paused": "⏸️ Приостановлен"
+    }
+
+    text = (
+        "⚙️ *Админ-панель*\n\n"
+        f"Статус кабинета: *{status_map.get(status['status'], status['status'])}*\n"
+        f"Людей в очереди: *{len(queue)}*\n"
+    )
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboards.get_admin_keyboard(),
+        parse_mode="Markdown"
+    )
+
+    await callback.answer()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
