@@ -23,7 +23,6 @@ db = database.db
 
 # ========== /start ==========
 @dp.message(Command("start"))
-@dp.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
 
