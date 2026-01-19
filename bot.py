@@ -255,14 +255,6 @@ async def process_new_name(message: Message, state: FSMContext):
 # ========== ПОСМОТРЕТЬ ОЧЕРЕДЬ ==========
 @dp.message(F.text == "👀 Посмотреть очередь")
 async def view_queue(message: Message):
-    # Сохраняем пользователя
-    db.add_or_update_user(
-        user_id=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
-    )
-
     queue = db.get_queue()
     status = db.get_office_status()
 
@@ -290,14 +282,6 @@ async def view_queue(message: Message):
 # ========== ВСТАТЬ В ОЧЕРЕДЬ ==========
 @dp.message(F.text == "📝 Встать в очередь")
 async def join_queue_start(message: Message, state: FSMContext):
-    # Сохраняем пользователя и получаем его display_name
-    display_name = db.add_or_update_user(
-        user_id=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
-    )
-
     status = db.get_office_status()
 
     if message.from_user.id == config.config.ADMIN_ID:
@@ -358,13 +342,6 @@ async def join_queue_start(message: Message, state: FSMContext):
 # ========== МОЙ НОМЕР ==========
 @dp.message(F.text == "🔍 Мой номер в очереди")
 async def my_position(message: Message):
-    # Сохраняем пользователя
-    db.add_or_update_user(
-        user_id=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
-    )
     position = db.get_user_position(message.from_user.id)
 
     if position:
@@ -382,14 +359,6 @@ async def my_position(message: Message):
 # ========== ВЫЙТИ ИЗ ОЧЕРЕДИ ==========
 @dp.message(F.text == "🚪 Выйти из очереди")
 async def leave_queue(message: Message):
-    # Сохраняем пользователя
-    db.add_or_update_user(
-        user_id=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
-    )
-    
     if db.remove_from_queue(message.from_user.id):
         await message.answer("✅ <b>Вы вышли из очереди</b>", parse_mode="HTML")
     else:
@@ -398,14 +367,6 @@ async def leave_queue(message: Message):
 # ========== СТАТУС КАБИНЕТА ==========
 @dp.message(F.text == "⏰ Статус кабинета")
 async def office_status(message: Message):
-    # Сохраняем пользователя
-    db.add_or_update_user(
-        user_id=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
-    )
-    
     status = db.get_office_status()
 
     status_texts = {
