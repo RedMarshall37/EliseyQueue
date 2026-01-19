@@ -1,266 +1,164 @@
-import asyncio
-from aiogram import Bot, Dispatcher, F
-from aiogram.filters import Command, StateFilter
-from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
+import sqlite3
+from typing import List, Optional, Dict
+from datetime import datetime
 
-import config
-import keyboards
-import database
+DB_PATH = "queue.db"
 
+class QueueDB:
+    def __init__(self):
+        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.cursor = self.conn.cursor()
+        self._setup_tables()
 
-# ========== FSM ==========
-class QueueStates(StatesGroup):
-    waiting_for_name = State()
-
-
-# ========== ИНИЦИАЛИЗАЦИЯ ==========
-bot = Bot(token=config.config.BOT_TOKEN)
-dp = Dispatcher()
-db = database.db
-
-
-# ========== /start ==========
-@dp.message(Command("start"))
-async def cmd_start(message: Message, state: FSMContext):
-    await state.clear()
-
-    is_admin = message.from_user.id == config.config.ADMIN_ID
-
-    # Сохраняем пользователя в базу
-    db.add_or_update_user(
-        user_id=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
-    )
-
-    if is_admin:
-        welcome_text = (
-            "👋 <b>Приветствую, Елисей!</b>\n\n"
-            "<b>Основные функции:</b>\n"
-            "• 👀 Посмотреть текущую очередь\n"
-            "• ⏰ Проверить статус кабинета\n"
-            "<b>Функции главного любителя белого монстра:</b>\n"
-            "• ✅ Открыть кабинет\n"
-            "• ❌ Закрыть кабинет\n"
-            "• 🗑️ Очистить очередь"
+    def _setup_tables(self):
+        # Таблица для ВСЕХ пользователей
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            registered_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL
         )
-        await message.answer(
-            welcome_text,
-            reply_markup=keyboards.get_admin_keyboard(),
-            parse_mode="HTML"
+        """)
+        
+        # Таблица для очереди
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS queue (
+            user_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            joined_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
-    else:
-        welcome_text = (
-            "👋 <b>Добро пожаловать в систему очереди в кабинет Елисея!</b>\n\n"
-            "<b>Основные функции:</b>\n"
-            "• 👀 Посмотреть текущую очередь\n"
-            "• 📝 Встать в очередь\n"
-            "• 🔍 Узнать свой номер\n"
-            "• 🚪 Выйти из очереди\n"
-            "• ⏰ Проверить статус кабинета"
+        """)
+        
+        # Таблица для статуса кабинета
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS office_status (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            status TEXT NOT NULL,
+            message TEXT,
+            updated_at TEXT NOT NULL
         )
-        await message.answer(
-            welcome_text,
-            reply_markup=keyboards.get_user_keyboard(),
-            parse_mode="HTML"
-        )
+        """)
+        
+        # Инициализируем статус кабинета, если пусто
+        self.cursor.execute("SELECT COUNT(*) FROM office_status")
+        if self.cursor.fetchone()[0] == 0:
+            self.set_office_status("closed")
+        
+        self.conn.commit()
 
-# ========== ПОСМОТРЕТЬ ОЧЕРЕДЬ ==========
-@dp.message(
-    StateFilter("*"),
-    F.text == "👀 Посмотреть очередь"
-)
-async def view_queue(message: Message):
-    queue = db.get_queue()
-    status = db.get_office_status()
+    # ---------------- Пользователи ----------------
 
-    if not queue:
-        text = "📭 *Очередь пуста*\n\n"
-    else:
-        text = "📋 *Текущая очередь:*\n\n"
+    def add_or_update_user(self, user_id: int, username: str = None, 
+                          first_name: str = None, last_name: str = None):
+        """Добавить или обновить пользователя"""
+        now = datetime.now().isoformat()
+        
+        self.cursor.execute("""
+        INSERT OR IGNORE INTO users (user_id, username, first_name, last_name, registered_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, username, first_name, last_name, now, now))
+        
+        self.cursor.execute("""
+        UPDATE users SET 
+            username = COALESCE(?, username),
+            first_name = COALESCE(?, first_name),
+            last_name = COALESCE(?, last_name),
+            last_seen_at = ?
+        WHERE user_id = ?
+        """, (username, first_name, last_name, now, user_id))
+        
+        self.conn.commit()
+
+    def get_all_users(self) -> List[Dict]:
+        """Получить всех пользователей бота"""
+        self.cursor.execute("SELECT user_id FROM users")
+        rows = self.cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    def get_all_user_ids(self) -> List[int]:
+        """Получить только ID всех пользователей"""
+        self.cursor.execute("SELECT user_id FROM users")
+        return [row[0] for row in self.cursor.fetchall()]
+
+    # ---------------- Очередь ----------------
+
+    def add_to_queue(self, user_id: int, name: str) -> int:
+        """Добавить пользователя в очередь, вернуть его позицию"""
+        # Проверка, не в очереди ли уже
+        if self.get_user_position(user_id):
+            return -1
+
+        joined_at = datetime.now().isoformat()
+        self.cursor.execute(
+            "INSERT INTO queue (user_id, name, joined_at) VALUES (?, ?, ?)",
+            (user_id, name, joined_at)
+        )
+        self.conn.commit()
+        return self.get_user_position(user_id)
+
+    def remove_from_queue(self, user_id: int) -> bool:
+        """Удалить пользователя из очереди"""
+        self.cursor.execute("DELETE FROM queue WHERE user_id = ?", (user_id,))
+        changed = self.cursor.rowcount
+        self.conn.commit()
+        return changed > 0
+
+    def get_queue(self) -> List[Dict]:
+        """Получить всю очередь в порядке добавления"""
+        self.cursor.execute("SELECT * FROM queue ORDER BY joined_at")
+        rows = self.cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    def get_user_position(self, user_id: int) -> Optional[int]:
+        """Получить позицию пользователя в очереди (1 = первый)"""
+        queue = self.get_queue()
         for i, user in enumerate(queue, start=1):
-            text += f"{i}. {user['name']}\n"
-        text += f"\n*Всего в очереди:* {len(queue)} человек(а)\n"
+            if user["user_id"] == user_id:
+                return i
+        return None
 
-    status_map = {
-        "open": "✅ Открыт",
-        "closed": "❌ Закрыт"
-    }
+    def clear_queue(self):
+        """Очистить всю очередь"""
+        self.cursor.execute("DELETE FROM queue")
+        self.conn.commit()
 
-    text += f"\n*Статус кабинета:* {status_map.get(status['status'], status['status'])}"
+    def get_next_user(self) -> Optional[Dict]:
+        """Получить следующего пользователя и удалить его из очереди"""
+        self.cursor.execute("SELECT * FROM queue ORDER BY joined_at LIMIT 1")
+        row = self.cursor.fetchone()
+        if row:
+            user = dict(row)
+            self.remove_from_queue(user["user_id"])
+            return user
+        return None
 
-    if status.get("message"):
-        text += f"\n{status['message']}"
+    # ---------------- Статус кабинета ----------------
 
-    await message.answer(text, parse_mode="Markdown")
+    def set_office_status(self, status: str, message: str = ""):
+        """Установить статус кабинета (open/closed/paused)"""
+        updated_at = datetime.now().isoformat()
+        self.cursor.execute("""
+        INSERT INTO office_status (id, status, message, updated_at)
+        VALUES (1, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            status=excluded.status,
+            message=excluded.message,
+            updated_at=excluded.updated_at
+        """, (status, message, updated_at))
+        self.conn.commit()
 
+    def get_office_status(self) -> Dict:
+        """Получить статус кабинета"""
+        self.cursor.execute("SELECT * FROM office_status WHERE id = 1")
+        row = self.cursor.fetchone()
+        if row:
+            return dict(row)
+        return {"status": "closed", "message": "", "updated_at": datetime.now().isoformat()}
 
-# ========== ВСТАТЬ В ОЧЕРЕДЬ ==========
-@dp.message(F.text == "📝 Встать в очередь")
-async def join_queue_start(message: Message, state: FSMContext):
-    status = db.get_office_status()
-
-    if message.from_user.id == config.config.ADMIN_ID:
-        await message.answer(
-            "👑 Босс ВТиПО не может вставать в очередь.",
-            parse_mode="Markdown"
-        )
-        return
-
-    if status["status"] == "closed":
-        await message.answer(
-            f"❌ *Кабинет закрыт!*\n{status.get('message', '')}",
-            parse_mode="Markdown"
-        )
-        return
-
-    position = db.get_user_position(message.from_user.id)
-    if position:
-        await message.answer(
-            f"⚠️ Вы уже в очереди! Ваш номер: *{position}*",
-            parse_mode="Markdown"
-        )
-        return
-
-    await message.answer(
-        "📝 *Введите ваше имя для очереди:*",
-        parse_mode="Markdown"
-    )
-    await state.set_state(QueueStates.waiting_for_name)
-
-
-@dp.message(QueueStates.waiting_for_name)
-async def join_queue_finish(message: Message, state: FSMContext):
-    name = message.text.strip()
-
-    if len(name) < 2:
-        await message.answer(
-            "❌ Имя должно быть не короче 2 символов. Попробуйте еще раз:"
-        )
-        return
-
-    db.add_to_queue(message.from_user.id, name)
-
-    queue = db.get_queue()
-    position = next(
-        i for i, u in enumerate(queue, 1)
-        if u["user_id"] == message.from_user.id
-    )
-
-    if position == -1:
-        await message.answer("⚠️ Вы уже в очереди!")
-    else:
-        await message.answer(
-            f"✅ *Вы добавлены в очередь!*\n\n"
-            f"• Ваш номер: *{position}*\n"
-            f"• Имя в очереди: *{name}*\n"
-            f"• Людей перед вами: *{position - 1}*",
-            parse_mode="Markdown"
-        )
-
-    await state.clear()
-
-
-# ========== МОЙ НОМЕР ==========
-@dp.message(F.text == "🔍 Мой номер в очереди")
-async def my_position(message: Message):
-    position = db.get_user_position(message.from_user.id)
-
-    if position:
-        queue = db.get_queue()
-        await message.answer(
-            f"🔢 *Ваш номер:* {position}\n"
-            f"👥 *Перед вами:* {position - 1}\n"
-            f"📊 *Всего в очереди:* {len(queue)}",
-            parse_mode="Markdown"
-        )
-    else:
-        await message.answer("ℹ️ *Вы не в очереди*", parse_mode="Markdown")
-
-
-# ========== ВЫЙТИ ИЗ ОЧЕРЕДИ ==========
-@dp.message(
-    StateFilter("*"),
-    F.text == "🚪 Выйти из очереди"
-)
-async def leave_queue(message: Message, state: FSMContext):
-    if db.remove_from_queue(message.from_user.id):
-        await state.clear()
-        await message.answer("✅ *Вы вышли из очереди*", parse_mode="Markdown")
-    else:
-        await message.answer("ℹ️ *Вы не были в очереди*", parse_mode="Markdown")
-
-
-# ========== АДМИН ПАНЕЛЬ ==========
-@dp.message(F.text == "✅ Открыть кабинет")
-async def admin_open(message: Message):
-    if message.from_user.id != config.config.ADMIN_ID:
-        return
-    
-    db.set_office_status("open", "Кабинет открыт")
-    await notify_all("ℹ️ <b>Кабинет открыт!</b> Можно вставать в очередь.")
-    await message.answer("✅ <b>Кабинет открыт</b>", parse_mode="HTML")
-
-
-@dp.message(F.text == "❌ Закрыть кабинет")
-async def admin_close(message: Message):
-    if message.from_user.id != config.config.ADMIN_ID:
-        return
-    
-    db.set_office_status("closed", "Кабинет закрыт")
-    await notify_all("⚠️ <b>Кабинет закрыт!</b>")
-    await message.answer("❌ <b>Кабинет закрыт</b>", parse_mode="HTML")
-
-
-@dp.message(F.text == "🗑️ Очистить очередь")
-async def admin_clear(message: Message):
-    if message.from_user.id != config.config.ADMIN_ID:
-        return
-    
-    db.clear_queue()
-    await notify_all("🗑️ <b>Очередь очищена администратором</b>")
-    await message.answer("🗑️ <b>Очередь очищена</b>", parse_mode="HTML")
-
-
-# ========== УВЕДОМЛЕНИЯ ==========
-async def notify_all(text: str):
-    """Отправить уведомление всем пользователям бота"""
-    user_ids = db.get_all_user_ids()
-    success_count = 0
-    fail_count = 0
-    
-    for user_id in user_ids:
-        try:
-            await bot.send_message(user_id, text, parse_mode="HTML")
-            success_count += 1
-        except Exception as e:
-            # Логируем ошибки, если нужно
-            fail_count += 1
-            print(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
-    
-    # Для админа можно добавить статистику отправки
-    if config.config.ADMIN_ID:
-        try:
-            await bot.send_message(
-                config.config.ADMIN_ID,
-                f"📊 Уведомление отправлено:\n"
-                f"✅ Успешно: {success_count}\n"
-                f"❌ Не удалось: {fail_count}",
-                parse_mode="HTML"
-            )
-        except:
-            pass
-
-
-# ========== ЗАПУСК ==========
-async def main():
-    print("🤖 Бот 'Очередь в кабинет Елисея' запущен...")
-    print(f"👑 Админ ID: {config.config.ADMIN_ID}")
-
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# ---------------- Экземпляр ----------------
+db = QueueDB()
