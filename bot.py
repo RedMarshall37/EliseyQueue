@@ -206,7 +206,7 @@ async def office_status(message: Message):
 # ========== АДМИН-ПАНЕЛЬ ==========
 @dp.message(
     StateFilter("*"),
-    F.text == "⚙️ Админ-панель"
+    F.text == "Админ-панель"
 )
 async def admin_panel(message: Message):
     if message.from_user.id != config.config.ADMIN_ID:
@@ -217,7 +217,7 @@ async def admin_panel(message: Message):
     status = db.get_office_status()
 
     text = (
-        "⚙️ *Админ-панель*\n\n"
+        "*Админ-панель*\n\n"
         f"Статус кабинета: *{status['status']}*\n"
         f"Людей в очереди: *{len(queue)}*\n"
     )
@@ -281,36 +281,6 @@ async def main():
         print("⚠️ Redis недоступен:", e)
 
     await dp.start_polling(bot)
-
-@dp.callback_query(F.data == "admin_panel")
-async def admin_panel_callback(callback: CallbackQuery):
-    if callback.from_user.id != config.config.ADMIN_ID:
-        await callback.answer("❌ Доступ запрещен!", show_alert=True)
-        return
-
-    queue = db.get_queue()
-    status = db.get_office_status()
-
-    status_map = {
-        "open": "✅ Открыт",
-        "closed": "❌ Закрыт",
-        "paused": "⏸️ Приостановлен"
-    }
-
-    text = (
-        "⚙️ *Админ-панель*\n\n"
-        f"Статус кабинета: *{status_map.get(status['status'], status['status'])}*\n"
-        f"Людей в очереди: *{len(queue)}*\n"
-    )
-
-    await callback.message.edit_text(
-        text,
-        reply_markup=keyboards.get_admin_keyboard(),
-        parse_mode="Markdown"
-    )
-
-    await callback.answer()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
