@@ -126,7 +126,7 @@ async def my_position(message: Message):
 @dp.message(F.text == "🚪 Выйти из очереди", state="*")
 async def leave_queue(message: Message):
     if db.remove_from_queue(message.from_user.id):
-         await state.clear()
+        await state.clear()
         await message.answer("✅ *Вы вышли из очереди*", parse_mode="Markdown")
     else:
         await message.answer("ℹ️ *Вы не были в очереди*", parse_mode="Markdown")
@@ -321,3 +321,4 @@ async def main():
 if __name__ == "__main__":
 
     asyncio.run(main())
+
