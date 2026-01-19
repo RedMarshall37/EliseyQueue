@@ -20,10 +20,11 @@ def get_user_keyboard():
 # Админ-клавиатура (обычная Reply-клавиатура)
 def get_admin_keyboard():
     buttons = [
-        [KeyboardButton(text="✅ Открыть кабинет"), KeyboardButton(text="✅ Открыть кабинет")],
-        [KeyboardButton(text="❌ Закрыть кабинет"), KeyboardButton(text="❌ Закрыть кабинет")],
-        [KeyboardButton(text="⏸️ Приостановить"), KeyboardButton(text="⏸️ Приостановить")],
-        [KeyboardButton(text="🗑️ Очистить очередь"), KeyboardButton(text="🗑️ Очистить очередь")]
+        [KeyboardButton(text="👀 Посмотреть очередь"), KeyboardButton(text="✅ Открыть кабинет")],
+        [KeyboardButton(text="📝 Встать в очередь"), KeyboardButton(text="❌ Закрыть кабинет")],
+        [KeyboardButton(text="🔍 Мой номер в очереди"), KeyboardButton(text="⏸️ Приостановить")],
+        [KeyboardButton(text="🚪 Выйти из очереди"), KeyboardButton(text="🗑️ Очистить очередь")],
+        [KeyboardButton(text="⏰ Статус кабинета")]
     ]
     
     return ReplyKeyboardMarkup(
