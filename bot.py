@@ -39,12 +39,35 @@ async def cmd_start(message: Message, state: FSMContext):
     )
 
     if(is_admin):
+        welcome_text = (
+            "👋 <b>Приветствую, Елисей!</b>\n\n"
+            "<b>Основные функции:</b>\n"
+            "• 👀 Посмотреть текущую очередь\n"
+            "• 📝 Встать в очередь\n"
+            "• 🔍 Узнать свой номер\n"
+            "• 🚪 Выйти из очереди\n"
+            "• ⏰ Проверить статус кабинета\n"
+            "<b>Функции главного любителя белого монстра:</b>\n"
+            "• ✅ Открыть кабинет\n"
+            "• ❌ Закрыть кабинет\n"
+            "• ⏸️ Приостановить\n"
+            "• 🗑️ Очистить очередь"
+        )
         await message.answer(
             welcome_text,
             reply_markup=keyboards.get_admin_keyboard(),
             parse_mode="HTML"
         )
     else:
+        welcome_text = (
+            "👋 <b>Добро пожаловать в систему очереди в кабинет Елисея!</b>\n\n"
+            "<b>Основные функции:</b>\n"
+            "• 👀 Посмотреть текущую очередь\n"
+            "• 📝 Встать в очередь\n"
+            "• 🔍 Узнать свой номер\n"
+            "• 🚪 Выйти из очереди\n"
+            "• ⏰ Проверить статус кабинета"
+        )
         await message.answer(
             welcome_text,
             reply_markup=keyboards.get_user_keyboard(),
@@ -185,100 +208,7 @@ async def leave_queue(message: Message, state: FSMContext):
         await message.answer("ℹ️ *Вы не были в очереди*", parse_mode="Markdown")
 
 
-# ========== СТАТУС КАБИНЕТА ==========
-@dp.message(
-    StateFilter("*"),
-    F.text == "⏰ Статус кабинета"
-)
-async def office_status(message: Message):
-    status = db.get_office_status()
-
-    status_texts = {
-        "open": "✅ *ОТКРЫТ*",
-        "closed": "❌ *ЗАКРЫТ*",
-        "paused": "⏸️ *ПРИОСТАНОВЛЕН*"
-    }
-
-    text = f"🚪 *Статус кабинета:* {status_texts.get(status['status'], status['status'])}\n"
-
-    if status.get("message"):
-        text += f"\n*Комментарий:* {status['message']}"
-
-    text += f"\n\n*Обновлено:* {status['updated_at'][:16].replace('T', ' ')}"
-
-    await message.answer(text, parse_mode="Markdown")
-
-
-# ========== АДМИН-ПАНЕЛЬ ==========
-@dp.message(
-    StateFilter("*"),
-    F.text == "Админ-панель"  # или "⚙️ Админ-панель" если измените текст
-)
-async def admin_panel(message: Message):
-    if message.from_user.id != config.config.ADMIN_ID:
-        await message.answer("❌ Доступ запрещен!")
-        return
-
-    queue = db.get_queue()
-    status = db.get_office_status()
-
-    status_map = {
-        "open": "✅ <b>ОТКРЫТ</b>",
-        "closed": "❌ <b>ЗАКРЫТ</b>",
-        "paused": "⏸️ <b>ПРИОСТАНОВЛЕН</b>"
-    }
-    
-    status_text = status_map.get(status['status'], status['status'])
-
-    text = (
-        "<b>Админ-панель</b>\n\n"
-        f"Статус кабинета: {status_text}\n"
-        f"Людей в очереди: <b>{len(queue)}</b>\n"
-    )
-
-    if queue:
-        text += f"\n<b>Текущая очередь:</b>\n"
-        for i, user in enumerate(queue, start=1):
-            text += f"{i}. {user['name']}\n"
-    else:
-        text += "\n📭 <i>Очередь пуста</i>"
-
-    await message.answer(
-        text,
-        parse_mode="HTML"
-    )
-
-
-# ========== CALLBACK АДМИНА ==========
-@dp.callback_query(F.data.startswith("admin_"))
-async def admin_actions(callback: CallbackQuery):
-    if callback.from_user.id != config.config.ADMIN_ID:
-        await callback.answer("Доступ запрещен!", show_alert=True)
-        return
-
-    action = callback.data
-
-    if action == "admin_open":
-        db.set_office_status("open", "Кабинет открыт")
-        await notify_all("ℹ️ *Кабинет открыт!* Можно вставать в очередь.")
-
-    elif action == "admin_close":
-        db.set_office_status("closed", "Кабинет закрыт")
-        await notify_all("⚠️ *Кабинет закрыт!*")
-
-    elif action == "admin_pause":
-        db.set_office_status("paused", "Прием приостановлен")
-        await notify_all("⏸️ *Прием приостановлен!*")
-
-    elif action == "admin_clear":
-        db.clear_queue()
-        await notify_all("🗑️ *Очередь очищена администратором*")
-
-    await callback.answer("Готово")
-    # await callback.message.edit_reply_markup(
-    #     reply_markup=keyboards.get_admin_keyboard()
-    # )
-
+# ========== АДМИН ПАНЕЛЬ ==========
 @dp.message(F.text == "✅ Открыть кабинет")
 async def admin_open(message: Message):
     if message.from_user.id != config.config.ADMIN_ID:
@@ -317,14 +247,6 @@ async def admin_clear(message: Message):
     db.clear_queue()
     await notify_all("🗑️ <b>Очередь очищена администратором</b>")
     await message.answer("🗑️ <b>Очередь очищена</b>", parse_mode="HTML")
-
-
-@dp.message(F.text == "◀️ Назад в меню")
-async def admin_back(message: Message):
-    await message.answer(
-        "Возврат в главное меню",
-        # reply_markup=keyboards.get_user_keyboard()
-    )
 
 
 # ========== УВЕДОМЛЕНИЯ ==========
