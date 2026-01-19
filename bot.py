@@ -205,7 +205,7 @@ async def office_status(message: Message):
 # ========== АДМИН-ПАНЕЛЬ ==========
 @dp.message(
     StateFilter("*"),
-    F.text == "Админ-панель"
+    F.text == "⚙️ Админ-панель"
 )
 async def admin_panel(message: Message):
     if message.from_user.id != config.config.ADMIN_ID:
