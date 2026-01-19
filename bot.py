@@ -408,7 +408,7 @@ async def join_queue_start(message: Message):
 
     if position:
         await message.answer(
-            f"✅ <b>Ты ̶п̶р̶е̶д̶а̶л̶ х̶р̶и̶с̶т̶а добавлен в очередь</b>\n\n"
+            f"✅ <b>Ты добавлен в очередь</b>\n\n"
             f"• Твой номер: <b>{position}</b>\n"
             f"• Людей перед вами: <b>{position - 1}</b>",
             parse_mode="HTML"
