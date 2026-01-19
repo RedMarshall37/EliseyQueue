@@ -23,29 +23,25 @@ db = database.db
 
 # ========== /start ==========
 @dp.message(Command("start"))
+@dp.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
 
     is_admin = message.from_user.id == config.config.ADMIN_ID
 
-    welcome_text = (
-        "👋 <b>Добро пожаловать в систему очереди в кабинет Елисея!</b>\n\n"
-        "<b>Основные функции:</b>\n"
-        "• 👀 Посмотреть текущую очередь\n"
-        "• 📝 Встать в очередь\n"
-        "• 🔍 Узнать свой номер\n"
-        "• 🚪 Выйти из очереди\n"
-        "• ⏰ Проверить статус кабинета"
+    # Сохраняем пользователя в базу
+    db.add_or_update_user(
+        user_id=message.from_user.id,
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+        last_name=message.from_user.last_name
     )
 
-    if(is_admin):
+    if is_admin:
         welcome_text = (
             "👋 <b>Приветствую, Елисей!</b>\n\n"
             "<b>Основные функции:</b>\n"
             "• 👀 Посмотреть текущую очередь\n"
-            "• 📝 Встать в очередь\n"
-            "• 🔍 Узнать свой номер\n"
-            "• 🚪 Выйти из очереди\n"
             "• ⏰ Проверить статус кабинета\n"
             "<b>Функции главного любителя белого монстра:</b>\n"
             "• ✅ Открыть кабинет\n"
@@ -100,7 +96,7 @@ async def view_queue(message: Message):
     text += f"\n*Статус кабинета:* {status_map.get(status['status'], status['status'])}"
 
     if status.get("message"):
-        text += f"\n*Комментарий:* {status['message']}"
+        text += f"\n{status['message']}"
 
     await message.answer(text, parse_mode="Markdown")
 
@@ -250,10 +246,32 @@ async def admin_clear(message: Message):
 
 
 # ========== УВЕДОМЛЕНИЯ ==========
+# ========== УВЕДОМЛЕНИЯ ==========
 async def notify_all(text: str):
-    for user in db.get_queue():
+    """Отправить уведомление всем пользователям бота"""
+    user_ids = db.get_all_user_ids()
+    success_count = 0
+    fail_count = 0
+    
+    for user_id in user_ids:
         try:
-            await bot.send_message(user["user_id"], text, parse_mode="Markdown")
+            await bot.send_message(user_id, text, parse_mode="HTML")
+            success_count += 1
+        except Exception as e:
+            # Логируем ошибки, если нужно
+            fail_count += 1
+            print(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
+    
+    # Для админа можно добавить статистику отправки
+    if config.config.ADMIN_ID:
+        try:
+            await bot.send_message(
+                config.config.ADMIN_ID,
+                f"📊 Уведомление отправлено:\n"
+                f"✅ Успешно: {success_count}\n"
+                f"❌ Не удалось: {fail_count}",
+                parse_mode="HTML"
+            )
         except:
             pass
 
