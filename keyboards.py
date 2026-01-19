@@ -36,8 +36,8 @@ def get_admin_keyboard():
 def get_queue_management_keyboard():
     buttons = [
         [KeyboardButton(text="🎯 Показать следующего"), KeyboardButton(text="✅ Завершить прием текущего")],
-        [KeyboardButton(text="✅ Завершить прием текущего"), KeyboardButton(text="❌ Отклонить следующего")],
-        [KeyboardButton(text="◀️ Назад в меню"), KeyboardButton(text="📊 Статистика очереди")]
+        [KeyboardButton(text="📊 Статистика очереди"), KeyboardButton(text="❌ Отклонить следующего")],
+        [KeyboardButton(text="◀️ Назад в меню")]
     ]
     
     return ReplyKeyboardMarkup(
