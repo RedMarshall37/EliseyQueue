@@ -9,6 +9,14 @@ import config
 import keyboards
 import database
 
+
+# ========== FSM ДЛЯ ИЗМЕНЕНИЯ ИМЕНИ ==========
+class ChangeNameStates(StatesGroup):
+    waiting_for_user_id = State()
+    waiting_for_new_name = State()
+    searching_user = State()
+
+
 # ========== ИНИЦИАЛИЗАЦИЯ ==========
 bot = Bot(token=config.config.BOT_TOKEN)
 dp = Dispatcher()
@@ -39,7 +47,8 @@ async def cmd_start(message: Message):
             "• ✅ Открыть кабинет\n"
             "• ❌ Закрыть кабинет\n"
             "• ⏸️ Приостановить\n"
-            "• 🗑️ Очистить очередь"
+            "• 🗑️ Очистить очередь\n"
+            "• ✏️ Изменить имя пользователя"
         )
         await message.answer(
             welcome_text,
@@ -61,6 +70,187 @@ async def cmd_start(message: Message):
             reply_markup=keyboards.get_user_keyboard(),
             parse_mode="HTML"
         )
+
+# ========== КОМАНДА ДЛЯ ИЗМЕНЕНИЯ ИМЕНИ ==========
+@dp.message(Command("change_name"))
+async def cmd_change_name(message: Message, state: FSMContext):
+    """Команда для изменения имени пользователя (только для админа)"""
+    if message.from_user.id != config.config.ADMIN_ID:
+        await message.answer("❌ <b>Доступ запрещен!</b>", parse_mode="HTML")
+        return
+    
+    await message.answer(
+        "👤 <b>Введите ID пользователя, чье имя нужно изменить:</b>\n\n"
+        "Можно также ввести часть имени для поиска.\n"
+        "Или нажмите ❌ Отмена",
+        reply_markup=keyboards.get_cancel_keyboard(),
+        parse_mode="HTML"
+    )
+    await state.set_state(ChangeNameStates.waiting_for_user_id)
+
+# ========== КНОПКА ИЗМЕНЕНИЯ ИМЕНИ ==========
+@dp.message(F.text == "✏️ Изменить имя")
+async def change_name_button(message: Message, state: FSMContext):
+    """Кнопка для изменения имени пользователя (только для админа)"""
+    if message.from_user.id != config.config.ADMIN_ID:
+        await message.answer("❌ <b>Доступ запрещен!</b>", parse_mode="HTML")
+        return
+    
+    await message.answer(
+        "👤 <b>Введите ID пользователя, чье имя нужно изменить:</b>\n\n"
+        "Можно также ввести часть имени для поиска.\n"
+        "Или нажмите ❌ Отмена",
+        reply_markup=keyboards.get_cancel_keyboard(),
+        parse_mode="HTML"
+    )
+    await state.set_state(ChangeNameStates.waiting_for_user_id)    
+
+# ========== ОТМЕНА ДЕЙСТВИЯ ==========
+@dp.message(F.text == "❌ Отмена")
+async def cancel_action(message: Message, state: FSMContext):
+    """Отмена любого действия"""
+    await state.clear()
+    if message.from_user.id == config.config.ADMIN_ID:
+        await message.answer(
+            "❌ <b>Действие отменено</b>",
+            reply_markup=keyboards.get_admin_keyboard(),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            "❌ <b>Действие отменено</b>",
+            reply_markup=keyboards.get_user_keyboard(),
+            parse_mode="HTML"
+        )
+
+# ========== ПОЛУЧЕНИЕ ID ПОЛЬЗОВАТЕЛЯ ==========
+@dp.message(ChangeNameStates.waiting_for_user_id)
+async def process_user_id(message: Message, state: FSMContext):
+    user_input = message.text.strip()
+    
+    # Если ввели числовой ID
+    if user_input.isdigit():
+        user_id = int(user_input)
+        user_info = db.get_user_info(user_id)
+        
+        if not user_info:
+            await message.answer(
+                f"❌ <b>Пользователь с ID {user_id} не найден в очереди.</b>\n\n"
+                f"Попробуйте еще раз или введите часть имени для поиска:",
+                parse_mode="HTML"
+            )
+            return
+        
+        # Сохраняем ID пользователя в состоянии
+        await state.update_data(user_id=user_id, current_name=user_info['name'])
+        
+        await message.answer(
+            f"👤 <b>Найден пользователь:</b>\n"
+            f"ID: {user_id}\n"
+            f"Текущее имя: <b>{user_info['name']}</b>\n\n"
+            f"✏️ <b>Введите новое имя:</b>",
+            parse_mode="HTML"
+        )
+        await state.set_state(ChangeNameStates.waiting_for_new_name)
+    
+    # Если ввели текст (поиск по имени)
+    else:
+        users = db.search_user_by_name(user_input)
+        
+        if not users:
+            await message.answer(
+                f"❌ <b>Пользователи с именем '{user_input}' не найдены.</b>\n\n"
+                f"Попробуйте еще раз или введите ID пользователя:",
+                parse_mode="HTML"
+            )
+            return
+        
+        if len(users) == 1:
+            user = users[0]
+            await state.update_data(user_id=user['user_id'], current_name=user['name'])
+            
+            await message.answer(
+                f"👤 <b>Найден пользователь:</b>\n"
+                f"ID: {user['user_id']}\n"
+                f"Текущее имя: <b>{user['name']}</b>\n\n"
+                f"✏️ <b>Введите новое имя:</b>",
+                parse_mode="HTML"
+            )
+            await state.set_state(ChangeNameStates.waiting_for_new_name)
+        else:
+            # Показываем список найденных пользователей
+            text = f"🔍 <b>Найдено пользователей ({len(users)}):</b>\n\n"
+            for i, user in enumerate(users, 1):
+                position = db.get_user_position(user['user_id'])
+                text += f"{i}. <b>{user['name']}</b> (ID: {user['user_id']}, позиция: {position})\n"
+            
+            text += "\n<b>Введите ID нужного пользователя:</b>"
+            
+            await state.update_data(search_results=users)
+            await message.answer(text, parse_mode="HTML")
+
+
+# ========== ПОЛУЧЕНИЕ НОВОГО ИМЕНИ ==========
+@dp.message(ChangeNameStates.waiting_for_new_name)
+async def process_new_name(message: Message, state: FSMContext):
+    new_name = message.text.strip()
+    
+    if len(new_name) < 2:
+        await message.answer(
+            "❌ <b>Имя должно быть не короче 2 символов.</b>\n"
+            "Попробуйте еще раз:",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Получаем данные из состояния
+    data = await state.get_data()
+    user_id = data.get('user_id')
+    current_name = data.get('current_name')
+    
+    # Меняем имя в базе данных
+    success = db.update_user_name_in_queue(user_id, new_name)
+    
+    if success:
+        # Получаем обновленную позицию
+        position = db.get_user_position(user_id)
+        
+        await message.answer(
+            f"✅ <b>Имя успешно изменено!</b>\n\n"
+            f"👤 Пользователь ID: {user_id}\n"
+            f"📝 Было: <b>{current_name}</b>\n"
+            f"📝 Стало: <b>{new_name}</b>\n"
+            f"🔢 Позиция в очереди: <b>{position}</b>",
+            parse_mode="HTML"
+        )
+        
+        # Уведомляем пользователя, если это не админ
+        if user_id != config.config.ADMIN_ID:
+            try:
+                await bot.send_message(
+                    user_id,
+                    f"✏️ <b>Администратор изменил ваше имя в очереди:</b>\n\n"
+                    f"📝 Было: <b>{current_name}</b>\n"
+                    f"📝 Стало: <b>{new_name}</b>\n"
+                    f"🔢 Ваша позиция: <b>{position}</b>",
+                    parse_mode="HTML"
+                )
+            except:
+                pass  # Пользователь заблокировал бота или удалил чат
+    else:
+        await message.answer(
+            "❌ <b>Не удалось изменить имя.</b>\n"
+            "Возможно, пользователь вышел из очереди.",
+            parse_mode="HTML"
+        )
+    
+    # Возвращаем админа в меню
+    await state.clear()
+    await message.answer(
+        "🏠 <b>Возврат в главное меню</b>",
+        reply_markup=keyboards.get_admin_keyboard(),
+        parse_mode="HTML"
+    )
 
 # ========== ПОСМОТРЕТЬ ОЧЕРЕДЬ ==========
 @dp.message(F.text == "👀 Посмотреть очередь")
@@ -89,7 +279,7 @@ async def view_queue(message: Message):
         "closed": "❌ Закрыт"
     }
 
-    text += f"\n*Статус кабинета:* {status_map.get(status['status'], status['status'])}"
+    text += f"\n<b>Статус кабинета:</b> {status_map.get(status['status'], status['status'])}"
 
     if status.get("message"):
         text += f"\n{status['message']}"
