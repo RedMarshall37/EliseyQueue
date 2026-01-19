@@ -1,6 +1,6 @@
 import asyncio
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -41,7 +41,10 @@ async def cmd_start(message: Message):
     )
 
 # ========== ПОСМОТРЕТЬ ОЧЕРЕДЬ ==========
-@dp.message(F.text == "👀 Посмотреть очередь", state="*")
+@dp.message(
+    StateFilter("*"),
+    F.text == "👀 Посмотреть очередь"
+)
 async def view_queue(message: Message):
     queue = db.get_queue()
     status = db.get_office_status()
@@ -132,7 +135,10 @@ async def leave_queue(message: Message):
         await message.answer("ℹ️ *Вы не были в очереди*", parse_mode="Markdown")
 
 # ========== СТАТУС КАБИНЕТА ==========
-@dp.message(F.text == "⏰ Статус кабинета", state="*")
+@dp.message(
+    StateFilter("*"),
+    F.text == "⏰ Статус кабинета"
+)
 async def office_status(message: Message):
     status = db.get_office_status()
     
@@ -321,4 +327,5 @@ async def main():
 if __name__ == "__main__":
 
     asyncio.run(main())
+
 
