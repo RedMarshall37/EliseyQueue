@@ -20,17 +20,17 @@ def get_user_keyboard(is_admin: bool = False):
         input_field_placeholder="Выберите действие"
     )
 
-# Админ-клавиатура
+# Админ-клавиатура (обычная Reply-клавиатура)
 def get_admin_keyboard():
     buttons = [
-        [InlineKeyboardButton(text="✅ Открыть кабинет", callback_data="admin_open")],
-        [InlineKeyboardButton(text="❌ Закрыть кабинет", callback_data="admin_close")],
-        [InlineKeyboardButton(text="⏸️ Приостановить", callback_data="admin_pause")],
-        [InlineKeyboardButton(text="➡️ Пропустить следующего", callback_data="admin_next")],
-        [InlineKeyboardButton(text="🗑️ Очистить очередь", callback_data="admin_clear")],
-        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
-        [InlineKeyboardButton(text="👥 Текущая очередь", callback_data="admin_view")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_back")]
+        [KeyboardButton(text="✅ Открыть кабинет"), KeyboardButton(text="❌ Закрыть кабинет")],
+        [KeyboardButton(text="⏸️ Приостановить"), KeyboardButton(text="➡️ Пропустить следующего")],
+        [KeyboardButton(text="🗑️ Очистить очередь"), KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="👥 Показать очередь"), KeyboardButton(text="◀️ Назад в меню")]
     ]
     
-    return InlineKeyboardMarkup(inline_keyboard=[buttons[i:i+2] for i in range(0, len(buttons), 2)])
+    return ReplyKeyboardMarkup(
+        keyboard=buttons,
+        resize_keyboard=True,
+        input_field_placeholder="Админ-команды"
+    )
