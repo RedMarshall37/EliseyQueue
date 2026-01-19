@@ -17,7 +17,7 @@ def get_user_keyboard():
         input_field_placeholder="Выберите действие"
     )
 
-# Админ-клавиатура (обычная Reply-клавиатура)
+# Админ-клавиатура
 def get_admin_keyboard():
     buttons = [
         [KeyboardButton(text="👀 Посмотреть очередь"), KeyboardButton(text="✅ Открыть кабинет")],
@@ -32,39 +32,30 @@ def get_admin_keyboard():
         input_field_placeholder="Админ-команды"
     )
 
-# Клавиатура управления очередью
-def get_queue_management_keyboard():
-    buttons = [
-        [KeyboardButton(text="🎯 Показать следующего"), KeyboardButton(text="✅ Завершить прием текущего")],
-        [KeyboardButton(text="📊 Статистика очереди"), KeyboardButton(text="❌ Отклонить следующего")],
-        [KeyboardButton(text="◀️ Назад в меню")]
-    ]
+# Клавиатура управления очередью (динамическая)
+def get_queue_management_keyboard(first_user_name: str = None):
+    buttons = []
+    
+    if first_user_name:
+        # Если есть пользователь в очереди
+        buttons = [
+            [KeyboardButton(text=f"✅ Принять {first_user_name}")],
+            [KeyboardButton(text=f"❌ Отклонить {first_user_name}")],
+            [KeyboardButton(text="📊 Статистика очереди")],
+            [KeyboardButton(text="◀️ Назад в меню")]
+        ]
+    else:
+        # Если очередь пуста
+        buttons = [
+            [KeyboardButton(text="📊 Статистика очереди")],
+            [KeyboardButton(text="◀️ Назад в меню")]
+        ]
     
     return ReplyKeyboardMarkup(
         keyboard=buttons,
         resize_keyboard=True,
         input_field_placeholder="Управление очередью"
     )
-
-# Клавиатура для принятия/отклонения пользователя
-def get_accept_reject_keyboard(user_id: int):
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{user_id}"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{user_id}")
-            ]
-        ]
-    )
-
-# Клавиатура для завершения приема
-def get_finish_reception_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Завершить прием", callback_data="finish_reception")]
-        ]
-    )
-
 
 # Клавиатура для отмены действия
 def get_cancel_keyboard():
