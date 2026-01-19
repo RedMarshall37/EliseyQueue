@@ -460,6 +460,7 @@ async def join_queue_start(message: Message):
 
 
 # ========== КНОПКА НАЗАД В МЕНЮ ==========
+@dp.message(F.text == "◀️ Назад в меню")
 async def back_to_menu(message: Message):
     if message.from_user.id == config.config.ADMIN_ID:
         await message.answer(
