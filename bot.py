@@ -38,11 +38,18 @@ async def cmd_start(message: Message, state: FSMContext):
         "• ⏰ Проверить статус кабинета"
     )
 
-    await message.answer(
-        welcome_text,
-        reply_markup=keyboards.get_user_keyboard(is_admin),
-        parse_mode="HTML"
-    )
+    if(is_admin):
+        await message.answer(
+            welcome_text,
+            reply_markup=keyboards.get_admin_keyboard(),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            welcome_text,
+            reply_markup=keyboards.get_user_keyboard(),
+            parse_mode="HTML"
+        )
 
 # ========== ПОСМОТРЕТЬ ОЧЕРЕДЬ ==========
 @dp.message(
@@ -238,7 +245,6 @@ async def admin_panel(message: Message):
 
     await message.answer(
         text,
-        reply_markup=keyboards.get_admin_keyboard(),
         parse_mode="HTML"
     )
 
@@ -269,9 +275,9 @@ async def admin_actions(callback: CallbackQuery):
         await notify_all("🗑️ *Очередь очищена администратором*")
 
     await callback.answer("Готово")
-    await callback.message.edit_reply_markup(
-        reply_markup=keyboards.get_admin_keyboard()
-    )
+    # await callback.message.edit_reply_markup(
+    #     reply_markup=keyboards.get_admin_keyboard()
+    # )
 
 @dp.message(F.text == "✅ Открыть кабинет")
 async def admin_open(message: Message):
@@ -317,7 +323,7 @@ async def admin_clear(message: Message):
 async def admin_back(message: Message):
     await message.answer(
         "Возврат в главное меню",
-        reply_markup=keyboards.get_user_keyboard(is_admin=True)
+        # reply_markup=keyboards.get_user_keyboard()
     )
 
 
