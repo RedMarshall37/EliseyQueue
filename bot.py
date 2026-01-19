@@ -23,7 +23,9 @@ db = database.db
 
 # ========== /start ==========
 @dp.message(Command("start"))
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
+    await state.clear()
+
     is_admin = message.from_user.id == config.config.ADMIN_ID
 
     welcome_text = (
@@ -79,6 +81,13 @@ async def view_queue(message: Message):
 async def join_queue_start(message: Message, state: FSMContext):
     status = db.get_office_status()
 
+    if message.from_user.id == config.config.ADMIN_ID:
+        await message.answer(
+            "👑 Босс ВТиПО не может вставать в очередь.",
+            parse_mode="Markdown"
+        )
+        return
+
     if status["status"] == "closed":
         await message.answer(
             f"❌ *Кабинет закрыт!*\n{status.get('message', '')}",
@@ -118,7 +127,13 @@ async def join_queue_finish(message: Message, state: FSMContext):
         )
         return
 
-    position = db.add_to_queue(message.from_user.id, name)
+    db.add_to_queue(message.from_user.id, name)
+
+    queue = db.get_queue()
+    position = next(
+        i for i, u in enumerate(queue, 1)
+        if u["user_id"] == message.from_user.id
+    )
 
     if position == -1:
         await message.answer("⚠️ Вы уже в очереди!")
@@ -189,7 +204,10 @@ async def office_status(message: Message):
 
 
 # ========== АДМИН-ПАНЕЛЬ ==========
-@dp.message(F.text == "⚙️ Админ-панель")
+@dp.message(
+    StateFilter("*"),
+    F.text == "⚙️ Админ-панель"
+)
 async def admin_panel(message: Message):
     if message.from_user.id != config.config.ADMIN_ID:
         await message.answer("❌ Доступ запрещен!")
