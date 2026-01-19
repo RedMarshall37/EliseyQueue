@@ -283,39 +283,39 @@ class QueueDB:
             return dict(row)
         return {"status": "closed", "message": "", "updated_at": datetime.now().isoformat()}
 
-# ---------------- Управление очередью ----------------
-def get_first_user_in_queue(self) -> Optional[Dict]:
-    """Получить первого пользователя в очереди (без удаления)"""
-    self.cursor.execute("""
-    SELECT q.user_id, u.display_name as name, q.joined_at
-    FROM queue q
-    LEFT JOIN users u ON q.user_id = u.user_id
-    ORDER BY q.joined_at LIMIT 1
-    """)
-    row = self.cursor.fetchone()
-    return dict(row) if row else None
-
-def get_current_serving_user(self) -> Optional[int]:
-    """Получить ID пользователя, которого сейчас принимают (если есть)"""
-    self.cursor.execute("SELECT value FROM system WHERE key = 'current_serving'")
-    row = self.cursor.fetchone()
-    return int(row[0]) if row else None
-
-def set_current_serving_user(self, user_id: Optional[int]):
-    """Установить ID пользователя, которого сейчас принимают"""
-    if user_id is None:
-        self.cursor.execute("DELETE FROM system WHERE key = 'current_serving'")
-    else:
+    # ---------------- Управление очередью ----------------
+    def get_first_user_in_queue(self) -> Optional[Dict]:
+        """Получить первого пользователя в очереди (без удаления)"""
         self.cursor.execute("""
-        INSERT OR REPLACE INTO system (key, value)
-        VALUES ('current_serving', ?)
-        """, (str(user_id),))
-    self.conn.commit()
+        SELECT q.user_id, u.display_name as name, q.joined_at
+        FROM queue q
+        LEFT JOIN users u ON q.user_id = u.user_id
+        ORDER BY q.joined_at LIMIT 1
+        """)
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
 
-def is_user_being_served(self, user_id: int) -> bool:
-    """Проверяет, обслуживается ли пользователь сейчас"""
-    current = self.get_current_serving_user()
-    return current == user_id
+    def get_current_serving_user(self) -> Optional[int]:
+        """Получить ID пользователя, которого сейчас принимают (если есть)"""
+        self.cursor.execute("SELECT value FROM system WHERE key = 'current_serving'")
+        row = self.cursor.fetchone()
+        return int(row[0]) if row else None
+
+    def set_current_serving_user(self, user_id: Optional[int]):
+        """Установить ID пользователя, которого сейчас принимают"""
+        if user_id is None:
+            self.cursor.execute("DELETE FROM system WHERE key = 'current_serving'")
+        else:
+            self.cursor.execute("""
+            INSERT OR REPLACE INTO system (key, value)
+            VALUES ('current_serving', ?)
+            """, (str(user_id),))
+        self.conn.commit()
+
+    def is_user_being_served(self, user_id: int) -> bool:
+        """Проверяет, обслуживается ли пользователь сейчас"""
+        current = self.get_current_serving_user()
+        return current == user_id
 
 # ---------------- Экземпляр ----------------
 db = QueueDB()
