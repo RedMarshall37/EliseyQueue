@@ -215,16 +215,33 @@ async def admin_panel(message: Message):
     queue = db.get_queue()
     status = db.get_office_status()
 
+    # Преобразуем статус кабинета в читаемый текст
+    status_map = {
+        "open": "✅ <b>ОТКРЫТ</b>",
+        "closed": "❌ <b>ЗАКРЫТ</b>",
+        "paused": "⏸️ <b>ПРИОСТАНОВЛЕН</b>"
+    }
+    
+    status_text = status_map.get(status['status'], status['status'])
+
     text = (
-        "\\*Админ\\-панель\\*\n\n"
-        f"Статус кабинета: \\*{status['status']}\\*\n"
-        f"Людей в очереди: \\*{len(queue)}\\*\n"
+        "<b>Админ-панель</b>\n\n"
+        f"Статус кабинета: {status_text}\n"
+        f"Людей в очереди: <b>{len(queue)}</b>\n"
     )
+
+    # Добавляем информацию об очереди, если есть
+    if queue:
+        text += f"\n<b>Текущая очередь:</b>\n"
+        for i, user in enumerate(queue, start=1):
+            text += f"{i}. {user['name']}\n"
+    else:
+        text += "\n📭 <i>Очередь пуста</i>"
 
     await message.answer(
         text,
         reply_markup=keyboards.get_admin_keyboard(),
-        parse_mode="MarkdownV2"  # Изменено на MarkdownV2
+        parse_mode="HTML"
     )
 
 
