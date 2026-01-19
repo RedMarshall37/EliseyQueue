@@ -223,6 +223,11 @@ async def admin_panel(message: Message):
     )
 
     await message.answer(
+        "Test",
+        parse_mode="Markdown"
+    )
+
+    await message.answer(
         text,
         reply_markup=keyboards.get_admin_keyboard(),
         parse_mode="Markdown"
@@ -284,3 +289,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
